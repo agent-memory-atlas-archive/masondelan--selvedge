@@ -34,6 +34,7 @@ from pathlib import Path
 import click
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
@@ -109,6 +110,11 @@ def resolve_since(since: str) -> str:
 def fmt_ts(ts: str) -> str:
     """Trim ISO timestamp to readable form."""
     return ts[:19].replace("T", " ") if ts else "—"
+
+
+def _safe_markup(value: object) -> str:
+    """Render stored/user text as literal text inside Rich markup strings."""
+    return escape(str(value))
 
 
 def _reason_display(value: str | None) -> tuple[str, bool]:
@@ -789,11 +795,11 @@ def diff(entity_path, limit, as_json):
         return
 
     if not rows:
-        console.print(f"[yellow]No history found for '{entity_path}'[/yellow]")
+        console.print(f"[yellow]No history found for '{_safe_markup(entity_path)}'[/yellow]")
         return
 
     table = Table(
-        title=f"History: {entity_path}",
+        title=f"History: {_safe_markup(entity_path)}",
         box=box.SIMPLE_HEAD,
         show_lines=True,
         header_style="bold",
@@ -811,9 +817,9 @@ def diff(entity_path, limit, as_json):
         table.add_row(
             fmt_ts(row.get("timestamp", "")),
             change,
-            row.get("agent", "") or "—",
-            row.get("diff", "") or "—",
-            row.get("reasoning", "") or "—",
+            _safe_markup(row.get("agent", "") or "—"),
+            _safe_markup(row.get("diff", "") or "—"),
+            _safe_markup(row.get("reasoning", "") or "—"),
         )
     console.print(table)
 
@@ -822,7 +828,7 @@ def diff(entity_path, limit, as_json):
     decision = storage.get_decision_status(entity_path)
     status_styles = {"reverted": "red", "reopened": "cyan", "active": "green"}
     style = status_styles.get(decision["status"], "dim")
-    console.print(f"  [dim]Status[/dim]  [{style}]{decision['status_line']}[/{style}]\n")
+    console.print(f"  [dim]Status[/dim]  [{style}]{_safe_markup(decision['status_line'])}[/{style}]\n")
 
 
 # ---------------------------------------------------------------------------
@@ -860,35 +866,35 @@ def blame(entity_path, as_json):
         if as_json:
             click.echo(json.dumps(payload, indent=2))
         else:
-            console.print(f"[yellow]{payload['error']}[/yellow]")
+            console.print(f"[yellow]{_safe_markup(payload['error'])}[/yellow]")
         sys.exit(1)
 
     if as_json:
         click.echo(json.dumps(payload, indent=2))
         return
 
-    console.print(f"\n[bold cyan]{entity_path}[/bold cyan]")
+    console.print(f"\n[bold cyan]{_safe_markup(entity_path)}[/bold cyan]")
     console.print(f"  [dim]Changed[/dim]    {fmt_ts(row['timestamp'])}")
     console.print(f"  [dim]Type[/dim]       [green]{row['change_type']}[/green]")
 
     if row.get("entity_type"):
-        console.print(f"  [dim]Entity[/dim]     {row['entity_type']}")
+        console.print(f"  [dim]Entity[/dim]     {_safe_markup(row['entity_type'])}")
     if row.get("agent"):
-        console.print(f"  [dim]Agent[/dim]      [magenta]{row['agent']}[/magenta]")
+        console.print(f"  [dim]Agent[/dim]      [magenta]{_safe_markup(row['agent'])}[/magenta]")
     if row.get("session_id"):
-        console.print(f"  [dim]Session[/dim]    {row['session_id']}")
+        console.print(f"  [dim]Session[/dim]    {_safe_markup(row['session_id'])}")
     if row.get("git_commit"):
-        console.print(f"  [dim]Commit[/dim]     [yellow]{row['git_commit']}[/yellow]")
+        console.print(f"  [dim]Commit[/dim]     [yellow]{_safe_markup(row['git_commit'])}[/yellow]")
     if row.get("project"):
-        console.print(f"  [dim]Project[/dim]    {row['project']}")
+        console.print(f"  [dim]Project[/dim]    {_safe_markup(row['project'])}")
     if row.get("diff"):
-        console.print(f"  [dim]Diff[/dim]       {row['diff']}")
+        console.print(f"  [dim]Diff[/dim]       {_safe_markup(row['diff'])}")
     if row.get("constraint"):
-        console.print(f"  [dim]Constraint[/dim] {row['constraint']}")
+        console.print(f"  [dim]Constraint[/dim] {_safe_markup(row['constraint'])}")
     if row.get("stale_when"):
-        console.print(f"  [dim]Stale when[/dim] {row['stale_when']}")
+        console.print(f"  [dim]Stale when[/dim] {_safe_markup(row['stale_when'])}")
     if row.get("supersedes"):
-        console.print(f"  [dim]Supersedes[/dim] {row['supersedes'][:8]}")
+        console.print(f"  [dim]Supersedes[/dim] {_safe_markup(row['supersedes'][:8])}")
     reason, recorded = _reason_display(row.get("reasoning"))
     console.print("\n  [dim]Reasoning:[/dim]")
     _print_explanation(reason, left=4, dim=not recorded)
@@ -897,7 +903,7 @@ def blame(entity_path, as_json):
     decision = storage.get_decision_status(entity_path)
     status_styles = {"reverted": "red", "reopened": "cyan", "active": "green"}
     style = status_styles.get(decision["status"], "dim")
-    console.print(f"\n  [dim]Status[/dim]     [{style}]{decision['status_line']}[/{style}]")
+    console.print(f"\n  [dim]Status[/dim]     [{style}]{_safe_markup(decision['status_line'])}[/{style}]")
     console.print()
 
 
@@ -1195,7 +1201,7 @@ def prior_attempts_cmd(entity, description, fuzzy, show_all, window, limit, as_j
 
     if not rows:
         target = entity or f'"{description or fuzzy}"'
-        console.print(f"[green]No prior attempts found for {target}.[/green]")
+        console.print(f"[green]No prior attempts found for {_safe_markup(target)}.[/green]")
         if not show_all:
             console.print(
                 "[dim]Nothing clearly tried-and-reverted — pass [bold]--all[/bold] "
@@ -1204,7 +1210,7 @@ def prior_attempts_cmd(entity, description, fuzzy, show_all, window, limit, as_j
         return  # empty is the normal, good answer — exit 0
 
     label = entity or f'"{description or fuzzy}"'
-    console.print(f"\n[bold]Prior attempts[/bold]  [dim]{label}[/dim]\n")
+    console.print(f"\n[bold]Prior attempts[/bold]  [dim]{_safe_markup(label)}[/dim]\n")
     outcome_styles = {
         "reverted": "red",
         "rejected": "red",
@@ -1222,8 +1228,8 @@ def prior_attempts_cmd(entity, description, fuzzy, show_all, window, limit, as_j
         )
         console.print(
             f"  [dim]{fmt_ts(r.get('timestamp', ''))}[/dim]  "
-            f"[cyan]{r.get('entity_path', '')}[/cyan]  "
-            f"[green]{r.get('change_type', '')}[/green]  "
+            f"[cyan]{_safe_markup(r.get('entity_path', ''))}[/cyan]  "
+            f"[green]{_safe_markup(r.get('change_type', ''))}[/green]  "
             f"[{outcome_style}]{outcome}[/{outcome_style}]  "
             f"[dim]({confidence})[/dim]{fuzzy_tag}"
         )
@@ -1272,8 +1278,8 @@ def prior_attempts_cmd(entity, description, fuzzy, show_all, window, limit, as_j
             continue
         style = status_styles.get(status, "dim")
         console.print(
-            f"  [bold]current status[/bold]  [cyan]{path}[/cyan]  "
-            f"[{style}]{status}[/{style}]"
+            f"  [bold]current status[/bold]  [cyan]{_safe_markup(path)}[/cyan]  "
+            f"[{style}]{_safe_markup(status)}[/{style}]"
         )
     console.print()
 
@@ -1904,10 +1910,11 @@ def supersede_cmd(entity_path, reasoning, diff_text, constraint, stale_when, exp
         return
 
     console.print(
-        f"[green]✓[/green] Superseded [dim]{stored.supersedes[:8]}[/dim] on "
-        f"[bold]{stored.entity_path}[/bold]  [dim]{stored.id[:8]}[/dim]"
+        f"[green]✓[/green] Superseded [dim]{_safe_markup(stored.supersedes[:8])}[/dim] on "
+        f"[bold]{_safe_markup(stored.entity_path)}[/bold]  "
+        f"[dim]{_safe_markup(stored.id[:8])}[/dim]"
     )
-    console.print(f"  [dim]Status[/dim]  [green]{decision['status_line']}[/green]")
+    console.print(f"  [dim]Status[/dim]  [green]{_safe_markup(decision['status_line'])}[/green]")
 
     for warning in [*limit_warnings, *check_reasoning_quality(reasoning)]:
         err_console.print(f"[yellow]warning:[/yellow] {warning}")
