@@ -1888,7 +1888,9 @@ class SelvedgeStorage:
             ``"no_history"``, from the latest event (see
             :func:`_derive_path_status`).
           - ``status_line`` — a one-line, templated, deterministic summary
-            suitable for printing verbatim. No LLM call.
+            suitable for printing verbatim. Explicit ``reject`` events read
+            "rejected" here; the machine ``status`` and trail ``phase`` keep
+            the existing "reverted" negative-verdict bucket. No LLM call.
           - ``trail`` — the events oldest-first, each annotated with a
             ``phase`` key (``tried`` / ``reverted`` / ``reopened``) and a
             derived ``superseded_by`` id (``""`` when nothing links it), so
@@ -1925,7 +1927,9 @@ class SelvedgeStorage:
             when = latest["timestamp"][:10]
             why = (latest["reasoning"] or "").strip()
             why_part = f": {why}" if why else ""
-            if status == "reverted":
+            if latest["change_type"] == "reject":
+                status_line = f"rejected (on {when}){why_part}"
+            elif status == "reverted":
                 status_line = f"reverted ({latest['change_type']} on {when}){why_part}"
             elif status == "reopened":
                 status_line = f"re-opened (superseded on {when}){why_part}"

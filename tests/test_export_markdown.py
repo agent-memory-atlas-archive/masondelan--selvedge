@@ -145,6 +145,44 @@ def test_a_superseded_entity_is_classified_as_reopened(storage):
     assert "payments.card_token" in reopened
 
 
+def test_rejection_has_its_own_section_before_reopened_and_active(storage: SelvedgeStorage) -> None:
+    """A path never taken must not be described as an implemented rollback."""
+    _seed(storage)
+    storage.log_event(ChangeEvent(
+        entity_path="deps/cache", change_type="reject",
+        timestamp="2026-01-01T00:00:00Z",
+        reasoning="Decided against another dependency."))
+    rows = storage.get_history(limit=100)
+    doc = render_markdown(rows)
+    assert doc == render_markdown(list(reversed(rows)))
+    reverted, rejected = doc.split("## Considered and rejected")
+    assert "deps/cache" not in reverted
+    assert "users.sso_token" in reverted
+    assert "deps/cache" in rejected.split("## Re-opened")[0]
+    assert "1 considered and rejected" in doc
+    assert doc.index("## Considered and rejected") < doc.index("## Re-opened")
+    assert doc.index("## Re-opened") < doc.index("## Active decisions")
+
+
+def test_superseding_rejection_moves_it_to_reopened_without_losing_history(
+    storage: SelvedgeStorage,
+) -> None:
+    rejected = storage.log_event(ChangeEvent(
+        entity_path="deps/cache", change_type="reject",
+        timestamp="2026-01-01T00:00:00Z",
+        reasoning="Decided against another dependency."))
+    storage.log_supersede("deps/cache", reasoning="The dependency is now maintained.")
+    rows = storage.get_history(limit=100)
+    doc = render_markdown(rows)
+    assert "## Considered and rejected" not in doc
+    assert "## Tried and reverted" not in doc
+    assert "## Re-opened" in doc
+    assert "Previously rejected or reverted, then explicitly re-opened." in doc
+    assert '- **reject** (2026-01-01): Decided against another dependency.' in doc
+    assert "- **supersede**" in doc
+    assert next(row for row in rows if row["id"] == rejected.id)["change_type"] == "reject"
+
+
 def test_constraint_is_surfaced_above_the_timeline(storage):
     _seed(storage)
     doc = render_markdown(storage.get_history(limit=100))

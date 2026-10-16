@@ -659,8 +659,15 @@ selvedge export --format markdown -o .selvedge/DECISIONS.md
 git add .selvedge/
 ```
 
-The digest is grouped by entity with **reverted decisions first**, and it is
-deterministic — regenerating with no new events produces a zero-line diff, so
+The digest is grouped by entity with **reverted and rejected decisions first**.
+Explicit `reject` events appear under **Considered and rejected**, separate from
+**Tried and reverted**. The latest event determines the section; a later
+`supersede` moves either kind to **Re-opened** while retaining the full history.
+Human-readable `blame` also labels explicit rejections as "rejected". For API
+compatibility, JSON `status` and trail `phase` keep the existing `reverted`
+negative-verdict category; `change_type: "reject"` identifies a rejection.
+
+The digest is deterministic — regenerating with no new events produces a zero-line diff, so
 it stays reviewable instead of becoming noise everyone learns to skip. Heading
 anchors derive from the entity path, so links into it keep working as it
 grows. Regenerate it in the same commit as the code, or from a pre-commit

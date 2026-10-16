@@ -26,6 +26,10 @@ Selvedge uses [semantic versioning](https://semver.org/).
   as `[/x]` no longer raise a Rich `MarkupError`; `log` previously exited 1
   after the event was already stored, inviting a duplicate retry. `--json`
   output is unchanged.
+- Human-readable `blame` labels explicit rejections as rejected, and Markdown
+  exports put them under "Considered and rejected" instead of "Tried and
+  reverted." Reopened copy now covers both kinds. Existing JSON status/phase
+  values, stored events and supersession behavior are unchanged.
 
 ## [0.3.16] - 2026-10-01
 

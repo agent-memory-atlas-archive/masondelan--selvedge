@@ -691,5 +691,39 @@ def test_cli_blame_shows_status_line(runner):
     assert "reverted" in result.output
 
 
+@pytest.mark.parametrize(
+    ("change_type", "label"),
+    [("reject", "rejected"), ("revert", "reverted"), ("remove", "reverted")],
+)
+def test_blame_distinguishes_rejection_without_changing_json_status(
+    runner: CliRunner, change_type: str, label: str,
+) -> None:
+    """Human wording differs; the existing negative-verdict enum stays stable."""
+    from selvedge.cli import cli
+
+    storage = _cli_storage()
+    event = _ev(storage, "deps/cache", change_type, "2026-01-01T00:00:00Z", "Too costly.")
+    decision = storage.get_decision_status("deps/cache")
+    assert decision["status"] == "reverted"
+    assert decision["trail"][0]["phase"] == "reverted"
+    assert decision["status_line"].startswith(f"{label} (")
+    assert "2026-01-01" in decision["status_line"]
+    assert decision["status_line"].endswith(": Too costly.")
+
+    text_result = runner.invoke(cli, ["blame", "deps/cache"])
+    assert text_result.exit_code == 0, text_result.output
+    assert decision["status_line"] in text_result.output
+    if change_type == "reject":
+        assert "reverted" not in text_result.output
+
+    json_result = runner.invoke(cli, ["blame", "deps/cache", "--json"])
+    assert json_result.exit_code == 0, json_result.output
+    payload = json.loads(json_result.output)
+    assert payload["id"] == event.id
+    assert payload["change_type"] == change_type
+    assert payload["status"] == "reverted"
+    assert "status_line" not in payload
+
+
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-v"])
