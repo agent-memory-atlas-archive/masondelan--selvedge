@@ -18,7 +18,7 @@ Two properties make it usable in version control, and both are load-bearing:
   so a link to a decision keeps working as the document grows. Sections are
   ordered by rule, not by insertion.
 
-Ordering puts reverted and superseded entities first. That is the same
+Ordering puts reverted, rejected and superseded entities first. That is the same
 precision-over-recall judgement the rest of the release makes: the expensive
 failure is re-implementing something the team already killed, so the
 document leads with what not to do rather than with a chronology.
@@ -27,15 +27,17 @@ document leads with what not to do rather than with a chronology.
 from __future__ import annotations
 
 _REVERTED = "reverted"
+_REJECTED = "rejected"
 _REOPENED = "reopened"
 
-#: Section order. Reverted first — a reader skimming the top of the file
+#: Section order. Negative verdicts first — a reader skimming the top of the file
 #: should hit the decisions that would cost them the most to rediscover.
-_STATUS_ORDER = (_REVERTED, _REOPENED, "active")
+_STATUS_ORDER = (_REVERTED, _REJECTED, _REOPENED, "active")
 
 _STATUS_HEADINGS = {
     _REVERTED: ("Tried and reverted", "Do not re-implement these without superseding first."),
-    _REOPENED: ("Re-opened", "Previously reverted, then explicitly re-opened."),
+    _REJECTED: ("Considered and rejected", "Do not implement these without superseding first."),
+    _REOPENED: ("Re-opened", "Previously rejected or reverted, then explicitly re-opened."),
     "active": ("Active decisions", "Current state, with the reasoning behind it."),
 }
 
@@ -88,12 +90,15 @@ def _group_by_entity(events: list[dict]) -> dict[str, list[dict]]:
 
 
 def _status_of(trail: list[dict], removal_types: frozenset[str]) -> str:
-    """Derive an entity's standing verdict from its trail.
+    """Derive an entity's presentation category from its trail.
 
-    Mirrors `storage._derive_path_status` rather than reading a stored field,
-    so this document can never disagree with what `blame` reports.
+    Follows `storage._derive_path_status`, but names explicit rejections
+    separately so a path decided against is not described as a rollback.
+    The storage/API status remains the broader negative-verdict bucket.
     """
     latest = trail[-1]
+    if latest["change_type"] == "reject":
+        return _REJECTED
     if latest["change_type"] in removal_types:
         return _REVERTED
     if latest["change_type"] == "supersede":

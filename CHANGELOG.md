@@ -20,6 +20,12 @@ Selvedge uses [semantic versioning](https://semver.org/).
 - Add Python 3.14 to CI, pin Actions to upstream commits, verify SQLite source
   checksums and validate registry publication inputs before shell use.
 
+### Fixed
+- Human-readable `blame` labels explicit rejections as rejected, and Markdown
+  exports put them under "Considered and rejected" instead of "Tried and
+  reverted." Reopened copy now covers both kinds. Existing JSON status/phase
+  values, stored events and supersession behavior are unchanged.
+
 ## [0.3.16] - 2026-10-01
 
 ### Added
