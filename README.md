@@ -42,6 +42,11 @@ Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Pytho
 3.10+. The demo uses a temporary database. Follow the [quickstart](#quickstart)
 to connect your agent to a real project.
 
+Use `selvedge demo --mcp` to save through a local stdio MCP server, restart it
+and retrieve the same record. Add `--json` for the checked IDs and versions.
+This tests the Python installation running Selvedge with disposable data;
+your agent's configuration, activation and hooks still need a separate check.
+
 ## Who Selvedge is for
 
 - **Solo developers** returning to a project after the original conversation is gone.

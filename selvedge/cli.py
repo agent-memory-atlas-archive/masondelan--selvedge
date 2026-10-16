@@ -269,6 +269,11 @@ def cli():
     # controlled by SELVEDGE_LOG_LEVEL (default WARNING).
     configure_logging()
 
+    # Both demo modes promise disposable local state. Skip the parent process's
+    # network/cache side effects before a demo callback can start.
+    if click.get_current_context().invoked_subcommand == "demo":
+        return
+
     # Background PyPI version check. Fires a daemon thread that fetches
     # the latest published version into ~/.selvedge/update_check.json
     # (at most once per 24h, gated by TTY / CI / suppression env vars).
@@ -2629,12 +2634,36 @@ def setup(path, non_interactive, assume_yes, force, skip_init, skip_hook, skip_e
 
 @cli.command("demo")
 @click.option("--json", "json_output", is_flag=True, help="Emit the demo result as JSON.")
-def demo(json_output: bool) -> None:
+@click.option("--mcp", "use_mcp", is_flag=True, help="Save and retrieve through two local stdio MCP server processes.")
+def demo(json_output: bool, use_mcp: bool) -> None:
     """Try a saved decision across two sessions in a temporary database.
 
     No setup or agent needed. Your project, configuration and real database
     are untouched. The temporary database is removed after the demo.
+    Use --mcp to check this installation's server over stdio after a restart;
+    this does not verify your client's configuration, activation or hooks.
     """
+    if use_mcp:
+        from .mcp_demo import MCPDemoError, run_mcp_demo
+
+        try:
+            result = run_mcp_demo()
+        except MCPDemoError as error:
+            if json_output:
+                console.print_json(data={"status": "error", "transport": "stdio", "error": str(error)})
+            else:
+                err_console.print(str(error), markup=False, highlight=False)
+            raise click.exceptions.Exit(1) from None
+        if json_output:
+            console.print_json(data=result)
+            return
+        console.print("\n[bold]One decision. Two local MCP server processes.[/bold]\n")
+        console.print(f"Saved and retrieved the same record: {result['event_id']}", markup=False)
+        console.print(result["reasoning"], markup=False)
+        console.print("[green]PASS[/green] · rejected · confidence: exact")
+        console.print("Temporary database removed. Client configuration, activation and hooks remain unverified.")
+        return
+
     from .demo import run_demo
 
     result = run_demo()
