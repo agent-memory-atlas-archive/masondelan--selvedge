@@ -25,6 +25,9 @@ Selvedge uses [semantic versioning](https://semver.org/).
   exports put them under "Considered and rejected" instead of "Tried and
   reverted." Reopened copy now covers both kinds. Existing JSON status/phase
   values, stored events and supersession behavior are unchanged.
+- Correct the coding-agent guide's change-type list, canonical prompt link and
+  measured MCP footprint. Update the planned Git AI reader's notes reference
+  to the upstream v3 namespace; the reader remains unimplemented.
 
 ## [0.3.16] - 2026-10-01
 
