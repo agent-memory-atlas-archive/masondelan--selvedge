@@ -91,7 +91,7 @@ product is decoration.
 **Dev focused** — built for developers in their existing toolchain,
 not enterprise procurement. CLI + MCP + git hooks. No SSO,
 no dashboards-as-the-product, no cloud tier as a paywall, and no
-opt-in telemetry unless the user enables it. The interactive CLI may make a
+telemetry unless the user opts in. The interactive CLI may make a
 bounded PyPI version check, documented in `SECURITY.md`. MIT-licensed end to
 end. The buyer-of-record
 is a developer; if the feature would only be discovered through a

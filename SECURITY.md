@@ -27,14 +27,14 @@ Selvedge's core is a local-only tool:
 
 - All data lives in a SQLite file under `.selvedge/` next to your code
   (or `~/.selvedge/` as a fallback). No code, paths, diffs, or reasoning text
-  is sent by the core database or MCP server. The CLI has two separate,
-  bounded network paths, neither carrying that data:
-  - an interactive stable-install version check against PyPI, at most once per
+  is sent by the core database or MCP server. Two separate, bounded network
+  paths send none of that project data:
+  - the CLI's interactive stable-install version check against PyPI, at most once per
     24 hours, which reads only the package's latest version and can be disabled
     with `SELVEDGE_NO_UPDATE_CHECK=1` (also suppressed by `SELVEDGE_QUIET=1`,
     `CI`, non-TTY runs, and development installs);
-  - an anonymous heartbeat that is off unless you explicitly enable it (see
-    `docs/telemetry.md`).
+  - an anonymous heartbeat from the CLI or MCP server that is off unless you
+    explicitly enable it (see `docs/telemetry.md`).
 - The opt-in heartbeat contains only its documented schema fields. It does not
   include repository names, paths, diffs, reasoning, prompts, command
   arguments, environment variables, or agent-client conversation data.
