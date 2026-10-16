@@ -2188,6 +2188,7 @@ def _read_export_history(since: str, entity: str, project: str, limit: int) -> l
 def _check_markdown_export(output: str, content: str) -> None:
     """Compare UTF-8 bytes and print a literal unified diff without writing."""
     import difflib
+    import io
 
     target = Path(output)
     try:
@@ -2206,12 +2207,14 @@ def _check_markdown_export(output: str, content: str) -> None:
         soft_wrap=True,
     )
     for line in difflib.unified_diff(
-        previous.splitlines(keepends=True), content.splitlines(keepends=True),
+        # Unified diffs use LF boundaries; a bare CR or form feed is content.
+        io.StringIO(previous, newline="\n").readlines(),
+        io.StringIO(content, newline="\n").readlines(),
         fromfile="/dev/null" if missing else output, tofile=f"{output} (generated)",
     ):
-        console.print(Text(line), end="", soft_wrap=True)
+        click.echo(line, nl=False)
         if not line.endswith("\n"):
-            console.print("\n\\ No newline at end of file", markup=False)
+            click.echo("\n\\ No newline at end of file")
     raise click.exceptions.Exit(1)
 
 

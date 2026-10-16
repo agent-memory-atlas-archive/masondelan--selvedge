@@ -77,6 +77,20 @@ def test_changed_record_has_actionable_literal_diff(store, tmp_path):
     assert target.read_bytes() == before
 
 
+@pytest.mark.parametrize("literal", [b"tab\tvalue", b"bell\x07value", b"carriage\rvalue", b"form\x0cvalue"])
+def test_diff_preserves_literal_bytes_within_a_line(store, tmp_path, literal):
+    """Review output must show the stored bytes, including non-LF controls."""
+    target = tmp_path / "DECISIONS.md"
+    before = render_markdown(store.get_history()).encode("utf-8") + literal + b"\n"
+    target.write_bytes(before)
+    result = _check(target)
+    assert result.exit_code == 1, result.output
+    # Click's text result normalizes newlines; inspect the actual output bytes.
+    assert b"-" + literal + b"\n" in result.stdout_bytes
+    assert b"No newline at end of file" not in result.stdout_bytes
+    assert target.read_bytes() == before
+
+
 def test_missing_digest_reports_full_diff_without_creating_parent(store, tmp_path):
     target = tmp_path / "missing" / "DECISIONS.md"
     result = _check(target)
@@ -214,6 +228,9 @@ def test_check_compares_bytes_including_line_endings(store, tmp_path, change):
     assert "@@ " in result.output
     if change == "newline":
         assert "No newline at end of file" in result.output
+    else:
+        assert b"-# Selvedge decision log\r\n" in result.stdout_bytes
+        assert b"No newline at end of file" not in result.stdout_bytes
     assert target.read_bytes() == actual
 
 
