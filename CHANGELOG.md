@@ -8,6 +8,16 @@ Selvedge uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `selvedge demo --mcp` checks the local stdio MCP server by saving a synthetic
+  rejection, restarting the server and retrieving the same record ID and content.
+  The disposable check supports JSON output, times out and cleans up its server
+  processes. It does not verify an agent client's configuration, activation or hooks.
+
+### Fixed
+- Both demo modes skip the parent CLI's background update check and opt-in
+  telemetry, preserving their promise not to modify user-global state.
+
 ### Changed
 - Make product positioning and onboarding agent-agnostic. General setup and CLI
   guidance lead with compatible MCP/CLI access; client presets and lifecycle

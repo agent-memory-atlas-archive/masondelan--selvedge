@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -9,7 +10,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, TextIO
 
-import anyio
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import CallToolResult
@@ -85,34 +85,33 @@ async def _call(
 
 
 async def _round_trip(params: StdioServerParameters, errlog: TextIO) -> dict:
-    with anyio.fail_after(_TIMEOUT_SECONDS):
-        saved, _ = await _call(params, errlog, "log_change", {
-            "entity_path": _ENTITY, "entity_type": "column", "change_type": "reject",
-            "reasoning": _REASON, "stale_when": _CONDITION,
-            "agent": "selvedge-mcp-demo", "session_id": "demo-save",
-        })
-        if not isinstance(saved, dict) or saved.get("status") != "logged" or not saved.get("id"):
-            raise MCPDemoError("The server did not confirm saving the demo decision.")
-        # _call exits both SDK contexts and closes the first server before the
-        # second starts: retrieval must come from persisted state, not memory.
-        rows, server = await _call(params, errlog, "prior_attempts", {"entity_path": _ENTITY})
-        if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
-            raise MCPDemoError("The restarted server did not return the saved decision.")
-        row = rows[0]
-        expected = {
-            "id": saved["id"], "entity_path": _ENTITY, "reasoning": _REASON,
-            "outcome": "rejected", "confidence": "exact", "stale_when": _CONDITION,
-        }
-        if any(row.get(key) != value for key, value in expected.items()):
-            raise MCPDemoError("The retrieved decision did not match the saved ID and content.")
-        return {
-            "status": "ok", "transport": "stdio", "entity_path": _ENTITY,
-            "event_id": saved["id"], "retrieved_event_id": row["id"],
-            "reasoning": _REASON, "outcome": row["outcome"], "confidence": row["confidence"],
-            "stale_when": _CONDITION, "isolated": True, "server_processes": 2,
-            "command": [params.command, *params.args], "package_version": __version__,
-            **server, "client_activation": "unverified",
-        }
+    saved, _ = await _call(params, errlog, "log_change", {
+        "entity_path": _ENTITY, "entity_type": "column", "change_type": "reject",
+        "reasoning": _REASON, "stale_when": _CONDITION,
+        "agent": "selvedge-mcp-demo", "session_id": "demo-save",
+    })
+    if not isinstance(saved, dict) or saved.get("status") != "logged" or not saved.get("id"):
+        raise MCPDemoError("The server did not confirm saving the demo decision.")
+    # _call exits both SDK contexts and closes the first server before the
+    # second starts: retrieval must come from persisted state, not memory.
+    rows, server = await _call(params, errlog, "prior_attempts", {"entity_path": _ENTITY})
+    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+        raise MCPDemoError("The restarted server did not return the saved decision.")
+    row = rows[0]
+    expected = {
+        "id": saved["id"], "entity_path": _ENTITY, "reasoning": _REASON,
+        "outcome": "rejected", "confidence": "exact", "stale_when": _CONDITION,
+    }
+    if any(row.get(key) != value for key, value in expected.items()):
+        raise MCPDemoError("The retrieved decision did not match the saved ID and content.")
+    return {
+        "status": "ok", "transport": "stdio", "entity_path": _ENTITY,
+        "event_id": saved["id"], "retrieved_event_id": row["id"],
+        "reasoning": _REASON, "outcome": row["outcome"], "confidence": row["confidence"],
+        "stale_when": _CONDITION, "isolated": True, "server_processes": 2,
+        "command": [params.command, *params.args], "package_version": __version__,
+        **server, "client_activation": "unverified",
+    }
 
 
 def _failure_detail(error: BaseException) -> str:
@@ -120,7 +119,7 @@ def _failure_detail(error: BaseException) -> str:
     nested = getattr(error, "exceptions", ())
     if nested:
         return _failure_detail(nested[0])
-    if isinstance(error, TimeoutError):
+    if isinstance(error, asyncio.TimeoutError):
         return f"The local MCP check exceeded {_TIMEOUT_SECONDS} seconds."
     if isinstance(error, OSError):
         return "Could not launch the local MCP server or create its temporary files."
@@ -141,7 +140,9 @@ def run_mcp_demo() -> dict:
             root = Path(directory)
             # Keep child logs out of JSON output and discard them with the demo.
             with (root / "server.log").open("w", encoding="utf-8") as errlog:
-                return anyio.run(_round_trip, _server_parameters(root), errlog)
+                return asyncio.run(asyncio.wait_for(
+                    _round_trip(_server_parameters(root), errlog), timeout=_TIMEOUT_SECONDS,
+                ))
     except Exception as error:
         raise MCPDemoError(
             f"{_failure_detail(error)} Check this Python installation with "
