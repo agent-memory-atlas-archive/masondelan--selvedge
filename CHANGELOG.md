@@ -17,7 +17,8 @@ Selvedge uses [semantic versioning](https://semver.org/).
   against existing history without rewriting it or initializing/migrating the
   store. Identical UTF-8 bytes exit 0 silently; stale/missing files exit 1 with
   a unified diff, read errors exit 1 with guidance, and invalid arguments exit 2.
-  Markdown files use deterministic UTF-8/LF output. Check mode skips background
+  Diffs preserve tabs and carriage returns. Markdown files use deterministic
+  UTF-8/LF output. Check mode skips background
   update and telemetry checks; other export formats keep their existing behavior.
 
 
