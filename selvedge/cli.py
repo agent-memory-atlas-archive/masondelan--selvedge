@@ -263,16 +263,22 @@ def render_events(rows: list[dict], title: str = "") -> None:
 
 @click.group()
 @click.version_option(package_name="selvedge")
-def cli():
+@click.pass_context
+def cli(ctx: click.Context):
     """Selvedge — change tracking for AI-era codebases."""
     # Configure structured logging once per CLI invocation. Verbosity is
     # controlled by SELVEDGE_LOG_LEVEL (default WARNING).
     configure_logging()
 
-    # Both demo modes promise disposable local state. Skip the parent process's
-    # network/cache side effects before a demo callback can start.
-    if click.get_current_context().invoked_subcommand == "demo":
-        return
+    # Both demo modes are disposable; export decides after option parsing
+    # whether it is a read-only drift check or a normal export.
+    if ctx.invoked_subcommand not in ("demo", "export"):
+        _start_background_tasks()
+
+
+def _start_background_tasks() -> None:
+    """Start normal CLI notices and opt-in telemetry outside disposable checks."""
+
 
     # Background PyPI version check. Fires a daemon thread that fetches
     # the latest published version into ~/.selvedge/update_check.json
@@ -2160,6 +2166,69 @@ def backfill_commit(commit_hash, window, quiet):
 # ---------------------------------------------------------------------------
 
 
+def _read_export_history(since: str, entity: str, project: str, limit: int) -> list[dict]:
+    """Read export filters without creating a store or running migrations."""
+    import sqlite3
+
+    from .storage import _coalesce_event_nullables, _escape_like, canonicalize_entity_path
+
+    clauses = ["1=1"]
+    params: list = []
+    if since:
+        clauses.append("timestamp >= ?")
+        params.append(since)
+    if entity:
+        canonical = canonicalize_entity_path(entity)
+        clauses.append("(entity_path = ? OR entity_path LIKE ? ESCAPE '\\')")
+        params.extend([canonical, f"{_escape_like(canonical)}.%"])
+    if project:
+        clauses.append("project = ?")
+        params.append(project)
+    params.append(limit)
+    path = get_db_path(read_only=True)
+    conn = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only=ON")
+        rows = conn.execute(
+            f"SELECT * FROM events WHERE {' AND '.join(clauses)} ORDER BY timestamp DESC LIMIT ?",
+            params,
+        ).fetchall()
+        return [_coalesce_event_nullables(dict(row)) for row in rows]
+    finally:
+        conn.close()
+
+
+def _check_markdown_export(output: str, content: str) -> None:
+    """Compare UTF-8 bytes and print a literal unified diff without writing."""
+    import difflib
+
+    target = Path(output)
+    try:
+        actual = target.read_bytes()
+    except FileNotFoundError:
+        actual = b""
+        missing = True
+    else:
+        missing = False
+    if not missing and actual == content.encode("utf-8"):
+        return
+    previous = actual.decode("utf-8")
+    console.print(
+        Text(f"{output}: {'missing' if missing else 'out of date'}. "
+             "Regenerate with the same export command without --check."),
+        soft_wrap=True,
+    )
+    for line in difflib.unified_diff(
+        previous.splitlines(keepends=True), content.splitlines(keepends=True),
+        fromfile="/dev/null" if missing else output, tofile=f"{output} (generated)",
+    ):
+        console.print(Text(line), end="", soft_wrap=True)
+        if not line.endswith("\n"):
+            console.print("\n\\ No newline at end of file", markup=False)
+    raise click.exceptions.Exit(1)
+
+
 @cli.command()
 @click.option("--format", "fmt",
               type=click.Choice(["json", "csv", "agent-trace", "markdown"]), default="json",
@@ -2174,7 +2243,9 @@ def backfill_commit(commit_hash, window, quiet):
               help="agent-trace only: merge events sharing a session_id into one record")
 @click.option("--output", "-o", default="-",
               help="Output file path (default: stdout)")
-def export(fmt, since, entity, project, limit, ndjson, collapse, output):
+@click.option("--check", is_flag=True,
+              help="Markdown file only: fail with a diff if the digest is missing or stale; do not write it")
+def export(fmt, since, entity, project, limit, ndjson, collapse, output, check):
     """Export change history to JSON, CSV, Markdown, or Agent Trace.
 
     \b
@@ -2183,6 +2254,7 @@ def export(fmt, since, entity, project, limit, ndjson, collapse, output):
       selvedge export --format csv -o out.csv   # CSV file
       selvedge export --since 30d --entity users
       selvedge export --format markdown -o DECISIONS.md
+      selvedge export --format markdown -o DECISIONS.md --check
       selvedge export --format agent-trace -o trace.json
       selvedge export --format agent-trace --ndjson -o trace.ndjson
       selvedge export --format agent-trace --collapse-by-session -o trace.json
@@ -2192,7 +2264,10 @@ def export(fmt, since, entity, project, limit, ndjson, collapse, output):
     grouped by entity, with reverted decisions first. Commit it next to
     `.selvedge/` so the captured reasoning is reviewable in a diff — a
     binary store is not. Regenerating with no new events produces a
-    zero-line diff.
+    zero-line diff. --check requires --format markdown and an explicit output
+    file. It exits 0 silently for identical bytes, 1 for drift or read errors,
+    and 2 for invalid arguments. It does not initialize or migrate the store,
+    update the digest, or start background update/telemetry checks.
 
     \b
     The agent-trace format emits Agent Trace v0.1.0 records
@@ -2204,15 +2279,34 @@ def export(fmt, since, entity, project, limit, ndjson, collapse, output):
     """
     import csv as csv_mod
     import io
+    import sqlite3
 
-    resolved_since = resolve_since(since)
+    if check and (fmt != "markdown" or output in ("", "-")):
+        raise click.UsageError("--check requires --format markdown and an explicit --output file.")
+    if not check:
+        _start_background_tasks()
+
+    if check:
+        try:
+            resolved_since = parse_time_string(since) if since else ""
+        except ValueError as exc:
+            raise click.BadParameter(str(exc), param_hint="--since") from exc
+    else:
+        resolved_since = resolve_since(since)
     effective_limit = limit if limit > 0 else 1_000_000
-    rows = get_storage().get_history(
-        since=resolved_since,
-        entity_path=entity,
-        project=project,
-        limit=effective_limit,
-    )
+    if check:
+        try:
+            rows = _read_export_history(resolved_since, entity, project, effective_limit)
+        except (OSError, sqlite3.Error) as exc:
+            err_console.print(Text(f"Cannot read decision history: {exc}. Check SELVEDGE_DB and initialize or upgrade the store before checking."), soft_wrap=True)
+            raise click.exceptions.Exit(1) from exc
+    else:
+        rows = get_storage().get_history(
+            since=resolved_since,
+            entity_path=entity,
+            project=project,
+            limit=effective_limit,
+        )
 
     if fmt == "agent-trace":
         from .exporters.agent_trace import (
@@ -2241,10 +2335,19 @@ def export(fmt, since, entity, project, limit, ndjson, collapse, output):
             writer.writerows(rows)
         content = buf.getvalue()
 
-    if output == "-":
+    if check:
+        try:
+            _check_markdown_export(output, content)
+        except (OSError, UnicodeError) as exc:
+            err_console.print(Text(f"Cannot check {output}: {exc}. Ensure the digest is a readable UTF-8 file."), soft_wrap=True)
+            raise click.exceptions.Exit(1) from exc
+    elif output == "-":
         click.echo(content)
     else:
-        Path(output).write_text(content)
+        if fmt == "markdown":
+            Path(output).write_text(content, encoding="utf-8", newline="")
+        else:
+            Path(output).write_text(content)
         console.print(
             f"[green]✓[/green] Exported [bold]{len(rows)}[/bold] events "
             f"→ [dim]{output}[/dim]"

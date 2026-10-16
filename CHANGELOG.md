@@ -13,14 +13,13 @@ Selvedge uses [semantic versioning](https://semver.org/).
   rejection, restarting the server and retrieving the same record ID and content.
   The disposable check supports JSON output, times out and cleans up its server
   processes. It does not verify an agent client's configuration, activation or hooks.
+- `selvedge export --format markdown -o DECISIONS.md --check` checks a digest
+  against existing history without rewriting it or initializing/migrating the
+  store. Identical UTF-8 bytes exit 0 silently; stale/missing files exit 1 with
+  a unified diff, read errors exit 1 with guidance, and invalid arguments exit 2.
+  Markdown files use deterministic UTF-8/LF output. Check mode skips background
+  update and telemetry checks; other export formats keep their existing behavior.
 
-### Fixed
-- The MCP demo retains its deadline error when SDK shutdown raises a transport
-  exception during cancellation; failures before the deadline keep their own
-  error classification. JSON version guidance distinguishes the installed
-  Selvedge package from the version reported in the MCP handshake.
-- Both demo modes skip the parent CLI's background update check and opt-in
-  telemetry, preserving their promise not to modify user-global state.
 
 ### Changed
 - Make product positioning and onboarding agent-agnostic. General setup and CLI
@@ -35,6 +34,12 @@ Selvedge uses [semantic versioning](https://semver.org/).
   checksums and validate registry publication inputs before shell use.
 
 ### Fixed
+- The MCP demo retains its deadline error when SDK shutdown raises a transport
+  exception during cancellation; failures before the deadline keep their own
+  error classification. JSON version guidance distinguishes the installed
+  Selvedge package from the version reported in the MCP handshake.
+- Both demo modes skip the parent CLI's background update check and opt-in
+  telemetry, preserving their promise not to modify user-global state.
 - `selvedge log` and `selvedge changeset` render user data (entity paths,
   reasoning, agent, project, changeset ids, error text) literally. Values such
   as `[/x]` no longer raise a Rich `MarkupError`; `log` previously exited 1

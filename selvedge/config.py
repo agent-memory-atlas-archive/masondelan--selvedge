@@ -51,13 +51,13 @@ class ResolvedDBPath(NamedTuple):
     source: DBPathSource
 
 
-def resolve_db_path() -> ResolvedDBPath:
+def resolve_db_path(*, read_only: bool = False) -> ResolvedDBPath:
     """
     Resolve the database path AND report which precedence step matched.
 
-    Mirrors :func:`get_db_path` exactly — same resolution order, same
-    side effects (creates the parent directory, prints the global-fallback
-    warning once per process). Use this when you need to know not just
+    Mirrors :func:`get_db_path` exactly — same resolution order. By default,
+    creates the parent directory and prints the global-fallback warning once
+    per process. ``read_only=True`` skips both side effects. Use this when you need to know not just
     *which* DB will be used, but *why* — `selvedge doctor` shows the
     source so the user can see whether `SELVEDGE_DB` is in effect, a
     walkup hit a project DB, or they're on the global fallback.
@@ -67,7 +67,8 @@ def resolve_db_path() -> ResolvedDBPath:
     # 1. Explicit env override
     if env_path := os.environ.get("SELVEDGE_DB"):
         p = Path(env_path).expanduser().resolve()
-        p.parent.mkdir(parents=True, exist_ok=True)
+        if not read_only:
+            p.parent.mkdir(parents=True, exist_ok=True)
         return ResolvedDBPath(p, "env")
 
     # 2. Walk up from CWD looking for an existing project-local DB file
@@ -79,17 +80,18 @@ def resolve_db_path() -> ResolvedDBPath:
 
     # 3. Global fallback
     default = Path.home() / SELVEDGE_DIR_NAME / SELVEDGE_DB_NAME
-    if not _warned_fallback and not os.environ.get("SELVEDGE_QUIET"):
+    if not read_only and not _warned_fallback and not os.environ.get("SELVEDGE_QUIET"):
         _warned_fallback = True
         sys.stderr.write(
             f"selvedge: using global database at {default}\n"
             "selvedge: run `selvedge init` in your project root to create a project-local DB\n"
         )
-    default.parent.mkdir(parents=True, exist_ok=True)
+    if not read_only:
+        default.parent.mkdir(parents=True, exist_ok=True)
     return ResolvedDBPath(default, "global")
 
 
-def get_db_path() -> Path:
+def get_db_path(*, read_only: bool = False) -> Path:
     """
     Resolve the Selvedge database path.
 
@@ -107,10 +109,13 @@ def get_db_path() -> Path:
     global default so users notice unintentional global use. Set the
     ``SELVEDGE_QUIET`` environment variable to suppress.
 
+    Pass ``read_only=True`` to resolve without creating a directory or printing
+    a warning. This does not open or initialize the database.
+
     Use :func:`resolve_db_path` when you also need to know which step
     of the resolution chain produced the path.
     """
-    return resolve_db_path().path
+    return resolve_db_path(read_only=read_only).path
 
 
 def get_selvedge_dir() -> Path:
