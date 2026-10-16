@@ -38,10 +38,11 @@ Selvedge's core is a local-only tool:
 - The opt-in heartbeat contains only its documented schema fields. It does not
   include repository names, paths, diffs, reasoning, prompts, command
   arguments, environment variables, or agent-client conversation data.
-- No network listeners. An opt-in HTTP layer is planned for v0.4.0;
-  until then there is no remote attack surface.
+- No network listeners in the local stdio server. A future HTTP transport is
+  roadmap work and is not part of the current security boundary.
 - No LLM calls in core — output is templated and deterministic.
-- Three runtime dependencies: `mcp`, `click`, `rich`.
+- Runtime dependencies are declared in `pyproject.toml`: `mcp`, `click`, `rich`,
+  and the conditional `tomli` dependency on Python 3.10.
 
 The most interesting attack surface is input handling: SQL handling of
 agent-supplied strings (everything an MCP client sends is untrusted)
@@ -50,9 +51,12 @@ especially welcome.
 
 ### Client, sharing, and website boundaries
 
-Claude Code, Cursor, Copilot, and other MCP clients invoke Selvedge locally;
-their own prompts, network behavior, sync settings, and account controls are
-outside Selvedge's data path. If a user commits or copies `.selvedge/`, that
+Claude Code, Cursor, Copilot, and other MCP clients invoke Selvedge locally.
+Retrieved decisions and reasoning are returned to that client, which may send
+them to its model provider according to its own settings and privacy policy.
+Local storage does not prevent this client-mediated sharing. Client prompts,
+network behavior, sync settings, and account controls are outside Selvedge's
+control. If a user commits or copies `.selvedge/`, that
 sharing is an explicit project or team operation and follows the receiving
 system's access controls.
 

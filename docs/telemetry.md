@@ -11,8 +11,8 @@ install, an interactive TTY run may make one background `GET` to PyPI every
 version in the `User-Agent`, never project data, and is disabled by
 `SELVEDGE_NO_UPDATE_CHECK=1`, `SELVEDGE_QUIET=1`, `CI`, or a non-TTY run.
 
-Telemetry is strictly opt-in. Until you explicitly enable it, Selvedge
-sends zero bytes. There is no phone-home on install, no first-run
+Heartbeat telemetry is strictly opt-in. Until you explicitly enable it, that
+telemetry path sends zero bytes. There is no heartbeat on install, no first-run
 prompt that defaults to yes, no "anonymous by default" fine print.
 
 ## What gets sent (after you opt in)
