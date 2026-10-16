@@ -79,6 +79,8 @@ async def _call(
             )
             return payload, {
                 "server_name": init.serverInfo.name,
+                # Raw handshake metadata; FastMCP may report its SDK version.
+                # package_version below identifies the Selvedge installation.
                 "server_version": init.serverInfo.version,
                 "protocol_version": str(init.protocolVersion),
             }
@@ -114,6 +116,26 @@ async def _round_trip(params: StdioServerParameters, errlog: TextIO) -> dict:
     }
 
 
+async def _with_deadline(params: StdioServerParameters, errlog: TextIO) -> dict:
+    # Own the deadline separately from SDK cleanup. wait_for() can lose its
+    # TimeoutError when cancellation triggers a transport exception instead.
+    task = asyncio.create_task(_round_trip(params, errlog))
+    try:
+        done, _ = await asyncio.wait({task}, timeout=_TIMEOUT_SECONDS)
+        if not done:
+            raise asyncio.TimeoutError
+        return task.result()
+    finally:
+        if not task.done():
+            task.cancel()
+        try:
+            await task  # Let the SDK close streams and terminate its process.
+        except (asyncio.CancelledError, Exception):
+            # task.result() already propagated pre-deadline failures. Cleanup
+            # errors must not replace a known timeout (or caller cancellation).
+            pass
+
+
 def _failure_detail(error: BaseException) -> str:
     # AnyIO task groups may wrap the useful error, including on Python 3.10.
     nested = getattr(error, "exceptions", ())
@@ -140,9 +162,7 @@ def run_mcp_demo() -> dict:
             root = Path(directory)
             # Keep child logs out of JSON output and discard them with the demo.
             with (root / "server.log").open("w", encoding="utf-8") as errlog:
-                return asyncio.run(asyncio.wait_for(
-                    _round_trip(_server_parameters(root), errlog), timeout=_TIMEOUT_SECONDS,
-                ))
+                return asyncio.run(_with_deadline(_server_parameters(root), errlog))
     except Exception as error:
         raise MCPDemoError(
             f"{_failure_detail(error)} Check this Python installation with "

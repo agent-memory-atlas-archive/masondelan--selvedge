@@ -15,6 +15,10 @@ Selvedge uses [semantic versioning](https://semver.org/).
   processes. It does not verify an agent client's configuration, activation or hooks.
 
 ### Fixed
+- The MCP demo retains its deadline error when SDK shutdown raises a transport
+  exception during cancellation; failures before the deadline keep their own
+  error classification. JSON version guidance distinguishes the installed
+  Selvedge package from the version reported in the MCP handshake.
 - Both demo modes skip the parent CLI's background update check and opt-in
   telemetry, preserving their promise not to modify user-global state.
 
