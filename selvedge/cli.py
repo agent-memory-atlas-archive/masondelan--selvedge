@@ -103,7 +103,7 @@ def resolve_since(since: str) -> str:
     try:
         return parse_time_string(since)
     except ValueError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {_safe_markup(e)}")
         sys.exit(2)
 
 
@@ -188,7 +188,7 @@ def render_summary(rows: list[dict], since: str = "") -> None:
         key = row.get("changeset_id") or row.get("session_id") or "_ungrouped_"
         groups[key].append(row)
 
-    period = f" since [bold]{since}[/bold]" if since else ""
+    period = f" since [bold]{_safe_markup(since)}[/bold]" if since else ""
     console.print(f"\n[bold]Changelog[/bold]{period}  [dim]({len(rows)} events, {len(groups)} group(s))[/dim]\n")
 
     for group_key, events in groups.items():
@@ -202,13 +202,13 @@ def render_summary(rows: list[dict], since: str = "") -> None:
         if group_key == "_ungrouped_":
             label = "[dim]ungrouped[/dim]"
         elif first.get("changeset_id"):
-            label = f"[bold cyan]changeset:[/bold cyan] [cyan]{group_key}[/cyan]"
+            label = f"[bold cyan]changeset:[/bold cyan] [cyan]{_safe_markup(group_key)}[/cyan]"
         else:
-            label = f"[bold]session:[/bold] [dim]{group_key[:16]}…[/dim]"
+            label = f"[bold]session:[/bold] [dim]{_safe_markup(group_key[:16])}…[/dim]"
 
-        header_parts = [label, f"[magenta]{agent}[/magenta]"]
+        header_parts = [label, f"[magenta]{_safe_markup(agent)}[/magenta]"]
         if project:
-            header_parts.append(f"[dim]{project}[/dim]")
+            header_parts.append(f"[dim]{_safe_markup(project)}[/dim]")
         header_parts.append(f"[dim]{t_from}[/dim]")
         if t_from != t_to:
             header_parts.append(f"[dim]→ {t_to}[/dim]")
@@ -220,8 +220,10 @@ def render_summary(rows: list[dict], since: str = "") -> None:
             snippet = (reasoning[:80] + "…") if len(reasoning) > 80 else reasoning
             entity  = ev.get("entity_path", "")
             change  = ev.get("change_type", "")
-            note    = f"  [dim]{snippet}[/dim]" if snippet else ""
-            console.print(f"    [dim]·[/dim] [green]{change}[/green] [bold]{entity}[/bold]{note}")
+            note    = f"  [dim]{_safe_markup(snippet)}[/dim]" if snippet else ""
+            console.print(
+                f"    [dim]·[/dim] [green]{_safe_markup(change)}[/green] [bold]{_safe_markup(entity)}[/bold]{note}"
+            )
 
         console.print()
 
@@ -1018,11 +1020,11 @@ def changeset(changeset_id, list_all, project, since, as_json):
 
         for row in rows:
             table.add_row(
-                row["changeset_id"],
+                _safe_markup(row["changeset_id"]),
                 str(row["event_count"]),
                 fmt_ts(row["first_event"]),
                 fmt_ts(row["last_event"]),
-                row.get("project") or "—",
+                _safe_markup(row.get("project") or "—"),
             )
         console.print(table)
         return
@@ -1038,7 +1040,7 @@ def changeset(changeset_id, list_all, project, since, as_json):
         return
 
     if len(rows) == 1 and rows[0].get("error"):
-        console.print(f"[yellow]{rows[0]['error']}[/yellow]")
+        console.print(f"[yellow]{_safe_markup(rows[0]['error'])}[/yellow]")
         return
 
     render_summary(rows)
@@ -1668,7 +1670,7 @@ def log(entity_path, change_type, diff_text, reasoning, entity_type, agent, comm
         normalized_revisit = normalize_revisit_after(revisit_after)
         normalized_expires = validate_expires_when(expires_when)
     except ValueError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {_safe_markup(e)}")
         sys.exit(2)
 
     # Size bounds + secret-shape check, shared with the MCP write path so
@@ -1737,25 +1739,28 @@ def log(entity_path, change_type, diff_text, reasoning, entity_type, agent, comm
             )
             stored = storage.log_event(event)
     except ValueError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {_safe_markup(e)}")
         sys.exit(2)
 
-    suffix = f"  [dim]changeset:{stored.changeset_id}[/dim]" if stored.changeset_id else ""
+    # Entity paths, changeset ids and prior event ids can contain user data. The
+    # event is already stored here, so a MarkupError on the success line would
+    # exit nonzero after a committed write and invite a duplicate retry.
+    suffix = f"  [dim]changeset:{_safe_markup(stored.changeset_id)}[/dim]" if stored.changeset_id else ""
     if rename_from:
         console.print(
-            f"[green]✓[/green] Renamed [bold]{rename_from}[/bold] → "
-            f"[bold]{stored.entity_path}[/bold]  [dim]{stored.id[:8]}[/dim]{suffix}"
+            f"[green]✓[/green] Renamed [bold]{_safe_markup(rename_from)}[/bold] → "
+            f"[bold]{_safe_markup(stored.entity_path)}[/bold]  [dim]{_safe_markup(stored.id[:8])}[/dim]{suffix}"
         )
     elif change_type == "supersede":
         console.print(
-            f"[green]✓[/green] Superseded [dim]{stored.supersedes[:8]}[/dim] on "
-            f"[bold]{stored.entity_path}[/bold] — decision re-opened  "
-            f"[dim]{stored.id[:8]}[/dim]{suffix}"
+            f"[green]✓[/green] Superseded [dim]{_safe_markup(stored.supersedes[:8])}[/dim] on "
+            f"[bold]{_safe_markup(stored.entity_path)}[/bold] — decision re-opened  "
+            f"[dim]{_safe_markup(stored.id[:8])}[/dim]{suffix}"
         )
     else:
         console.print(
-            f"[green]✓[/green] Logged [bold]{stored.entity_path}[/bold] ({change_type})  "
-            f"[dim]{stored.id[:8]}[/dim]{suffix}"
+            f"[green]✓[/green] Logged [bold]{_safe_markup(stored.entity_path)}[/bold] ({_safe_markup(change_type)})  "
+            f"[dim]{_safe_markup(stored.id[:8])}[/dim]{suffix}"
         )
 
     # Surface reasoning-quality + entity-path-shape + revisit-date warnings so
@@ -1771,7 +1776,7 @@ def log(entity_path, change_type, diff_text, reasoning, entity_type, agent, comm
         stored.change_type, stored.stale_when, stored.expires_when
     )
     for warning in warnings:
-        err_console.print(f"[yellow]warning:[/yellow] {warning}")
+        err_console.print(f"[yellow]warning:[/yellow] {_safe_markup(warning)}")
 
 
 # ---------------------------------------------------------------------------

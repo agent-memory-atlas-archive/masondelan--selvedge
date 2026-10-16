@@ -20,6 +20,13 @@ Selvedge uses [semantic versioning](https://semver.org/).
 - Add Python 3.14 to CI, pin Actions to upstream commits, verify SQLite source
   checksums and validate registry publication inputs before shell use.
 
+### Fixed
+- `selvedge log` and `selvedge changeset` render user data (entity paths,
+  reasoning, agent, project, changeset ids, error text) literally. Values such
+  as `[/x]` no longer raise a Rich `MarkupError`; `log` previously exited 1
+  after the event was already stored, inviting a duplicate retry. `--json`
+  output is unchanged.
+
 ## [0.3.16] - 2026-10-01
 
 ### Added
