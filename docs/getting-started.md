@@ -6,6 +6,32 @@
 pip install selvedge
 ```
 
+## Check the local server
+
+```bash
+selvedge demo --mcp
+selvedge demo --mcp --json
+```
+
+This saves a synthetic rejected decision over stdio MCP, closes the server,
+starts a fresh server and checks that the same record ID and reason return.
+It uses the Python installation running Selvedge and a temporary database;
+your project, configured database and agent configuration are untouched.
+The check has a 15-second deadline, followed by subprocess cleanup. It skips
+update checks and telemetry. The plain `selvedge demo` remains a quicker,
+in-process storage demonstration.
+
+In JSON output, `package_version` is the installed Selvedge version.
+`server_version` is the version reported by the MCP server during initialization;
+FastMCP may report the MCP SDK version there. `protocol_version` is the negotiated
+MCP protocol version.
+
+A successful MCP demo verifies this local subprocess exchange. It does not
+test your agent's configured command, trust settings, tool use or lifecycle
+hooks. After setup, save a real decision in your agent and retrieve its record
+ID in a fresh session. Use `selvedge doctor --agent CLIENT` to inspect a supported
+client's project hook configuration; activation still needs a client check.
+
 ## Initialize your project
 
 ```bash

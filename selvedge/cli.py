@@ -34,6 +34,7 @@ from pathlib import Path
 import click
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
@@ -102,13 +103,18 @@ def resolve_since(since: str) -> str:
     try:
         return parse_time_string(since)
     except ValueError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {_safe_markup(e)}")
         sys.exit(2)
 
 
 def fmt_ts(ts: str) -> str:
     """Trim ISO timestamp to readable form."""
     return ts[:19].replace("T", " ") if ts else "—"
+
+
+def _safe_markup(value: object) -> str:
+    """Render stored/user text as literal text inside Rich markup strings."""
+    return escape(str(value))
 
 
 def _reason_display(value: str | None) -> tuple[str, bool]:
@@ -182,7 +188,7 @@ def render_summary(rows: list[dict], since: str = "") -> None:
         key = row.get("changeset_id") or row.get("session_id") or "_ungrouped_"
         groups[key].append(row)
 
-    period = f" since [bold]{since}[/bold]" if since else ""
+    period = f" since [bold]{_safe_markup(since)}[/bold]" if since else ""
     console.print(f"\n[bold]Changelog[/bold]{period}  [dim]({len(rows)} events, {len(groups)} group(s))[/dim]\n")
 
     for group_key, events in groups.items():
@@ -196,13 +202,13 @@ def render_summary(rows: list[dict], since: str = "") -> None:
         if group_key == "_ungrouped_":
             label = "[dim]ungrouped[/dim]"
         elif first.get("changeset_id"):
-            label = f"[bold cyan]changeset:[/bold cyan] [cyan]{group_key}[/cyan]"
+            label = f"[bold cyan]changeset:[/bold cyan] [cyan]{_safe_markup(group_key)}[/cyan]"
         else:
-            label = f"[bold]session:[/bold] [dim]{group_key[:16]}…[/dim]"
+            label = f"[bold]session:[/bold] [dim]{_safe_markup(group_key[:16])}…[/dim]"
 
-        header_parts = [label, f"[magenta]{agent}[/magenta]"]
+        header_parts = [label, f"[magenta]{_safe_markup(agent)}[/magenta]"]
         if project:
-            header_parts.append(f"[dim]{project}[/dim]")
+            header_parts.append(f"[dim]{_safe_markup(project)}[/dim]")
         header_parts.append(f"[dim]{t_from}[/dim]")
         if t_from != t_to:
             header_parts.append(f"[dim]→ {t_to}[/dim]")
@@ -214,8 +220,10 @@ def render_summary(rows: list[dict], since: str = "") -> None:
             snippet = (reasoning[:80] + "…") if len(reasoning) > 80 else reasoning
             entity  = ev.get("entity_path", "")
             change  = ev.get("change_type", "")
-            note    = f"  [dim]{snippet}[/dim]" if snippet else ""
-            console.print(f"    [dim]·[/dim] [green]{change}[/green] [bold]{entity}[/bold]{note}")
+            note    = f"  [dim]{_safe_markup(snippet)}[/dim]" if snippet else ""
+            console.print(
+                f"    [dim]·[/dim] [green]{_safe_markup(change)}[/green] [bold]{_safe_markup(entity)}[/bold]{note}"
+            )
 
         console.print()
 
@@ -255,11 +263,22 @@ def render_events(rows: list[dict], title: str = "") -> None:
 
 @click.group()
 @click.version_option(package_name="selvedge")
-def cli():
+@click.pass_context
+def cli(ctx: click.Context):
     """Selvedge — change tracking for AI-era codebases."""
     # Configure structured logging once per CLI invocation. Verbosity is
     # controlled by SELVEDGE_LOG_LEVEL (default WARNING).
     configure_logging()
+
+    # Both demo modes are disposable; export decides after option parsing
+    # whether it is a read-only drift check or a normal export.
+    if ctx.invoked_subcommand not in ("demo", "export"):
+        _start_background_tasks()
+
+
+def _start_background_tasks() -> None:
+    """Start normal CLI notices and opt-in telemetry outside disposable checks."""
+
 
     # Background PyPI version check. Fires a daemon thread that fetches
     # the latest published version into ~/.selvedge/update_check.json
@@ -789,11 +808,11 @@ def diff(entity_path, limit, as_json):
         return
 
     if not rows:
-        console.print(f"[yellow]No history found for '{entity_path}'[/yellow]")
+        console.print(f"[yellow]No history found for '{_safe_markup(entity_path)}'[/yellow]")
         return
 
     table = Table(
-        title=f"History: {entity_path}",
+        title=f"History: {_safe_markup(entity_path)}",
         box=box.SIMPLE_HEAD,
         show_lines=True,
         header_style="bold",
@@ -811,9 +830,9 @@ def diff(entity_path, limit, as_json):
         table.add_row(
             fmt_ts(row.get("timestamp", "")),
             change,
-            row.get("agent", "") or "—",
-            row.get("diff", "") or "—",
-            row.get("reasoning", "") or "—",
+            _safe_markup(row.get("agent", "") or "—"),
+            _safe_markup(row.get("diff", "") or "—"),
+            _safe_markup(row.get("reasoning", "") or "—"),
         )
     console.print(table)
 
@@ -822,7 +841,7 @@ def diff(entity_path, limit, as_json):
     decision = storage.get_decision_status(entity_path)
     status_styles = {"reverted": "red", "reopened": "cyan", "active": "green"}
     style = status_styles.get(decision["status"], "dim")
-    console.print(f"  [dim]Status[/dim]  [{style}]{decision['status_line']}[/{style}]\n")
+    console.print(f"  [dim]Status[/dim]  [{style}]{_safe_markup(decision['status_line'])}[/{style}]\n")
 
 
 # ---------------------------------------------------------------------------
@@ -860,35 +879,35 @@ def blame(entity_path, as_json):
         if as_json:
             click.echo(json.dumps(payload, indent=2))
         else:
-            console.print(f"[yellow]{payload['error']}[/yellow]")
+            console.print(f"[yellow]{_safe_markup(payload['error'])}[/yellow]")
         sys.exit(1)
 
     if as_json:
         click.echo(json.dumps(payload, indent=2))
         return
 
-    console.print(f"\n[bold cyan]{entity_path}[/bold cyan]")
+    console.print(f"\n[bold cyan]{_safe_markup(entity_path)}[/bold cyan]")
     console.print(f"  [dim]Changed[/dim]    {fmt_ts(row['timestamp'])}")
     console.print(f"  [dim]Type[/dim]       [green]{row['change_type']}[/green]")
 
     if row.get("entity_type"):
-        console.print(f"  [dim]Entity[/dim]     {row['entity_type']}")
+        console.print(f"  [dim]Entity[/dim]     {_safe_markup(row['entity_type'])}")
     if row.get("agent"):
-        console.print(f"  [dim]Agent[/dim]      [magenta]{row['agent']}[/magenta]")
+        console.print(f"  [dim]Agent[/dim]      [magenta]{_safe_markup(row['agent'])}[/magenta]")
     if row.get("session_id"):
-        console.print(f"  [dim]Session[/dim]    {row['session_id']}")
+        console.print(f"  [dim]Session[/dim]    {_safe_markup(row['session_id'])}")
     if row.get("git_commit"):
-        console.print(f"  [dim]Commit[/dim]     [yellow]{row['git_commit']}[/yellow]")
+        console.print(f"  [dim]Commit[/dim]     [yellow]{_safe_markup(row['git_commit'])}[/yellow]")
     if row.get("project"):
-        console.print(f"  [dim]Project[/dim]    {row['project']}")
+        console.print(f"  [dim]Project[/dim]    {_safe_markup(row['project'])}")
     if row.get("diff"):
-        console.print(f"  [dim]Diff[/dim]       {row['diff']}")
+        console.print(f"  [dim]Diff[/dim]       {_safe_markup(row['diff'])}")
     if row.get("constraint"):
-        console.print(f"  [dim]Constraint[/dim] {row['constraint']}")
+        console.print(f"  [dim]Constraint[/dim] {_safe_markup(row['constraint'])}")
     if row.get("stale_when"):
-        console.print(f"  [dim]Stale when[/dim] {row['stale_when']}")
+        console.print(f"  [dim]Stale when[/dim] {_safe_markup(row['stale_when'])}")
     if row.get("supersedes"):
-        console.print(f"  [dim]Supersedes[/dim] {row['supersedes'][:8]}")
+        console.print(f"  [dim]Supersedes[/dim] {_safe_markup(row['supersedes'][:8])}")
     reason, recorded = _reason_display(row.get("reasoning"))
     console.print("\n  [dim]Reasoning:[/dim]")
     _print_explanation(reason, left=4, dim=not recorded)
@@ -897,7 +916,7 @@ def blame(entity_path, as_json):
     decision = storage.get_decision_status(entity_path)
     status_styles = {"reverted": "red", "reopened": "cyan", "active": "green"}
     style = status_styles.get(decision["status"], "dim")
-    console.print(f"\n  [dim]Status[/dim]     [{style}]{decision['status_line']}[/{style}]")
+    console.print(f"\n  [dim]Status[/dim]     [{style}]{_safe_markup(decision['status_line'])}[/{style}]")
     console.print()
 
 
@@ -1012,11 +1031,11 @@ def changeset(changeset_id, list_all, project, since, as_json):
 
         for row in rows:
             table.add_row(
-                row["changeset_id"],
+                _safe_markup(row["changeset_id"]),
                 str(row["event_count"]),
                 fmt_ts(row["first_event"]),
                 fmt_ts(row["last_event"]),
-                row.get("project") or "—",
+                _safe_markup(row.get("project") or "—"),
             )
         console.print(table)
         return
@@ -1032,7 +1051,7 @@ def changeset(changeset_id, list_all, project, since, as_json):
         return
 
     if len(rows) == 1 and rows[0].get("error"):
-        console.print(f"[yellow]{rows[0]['error']}[/yellow]")
+        console.print(f"[yellow]{_safe_markup(rows[0]['error'])}[/yellow]")
         return
 
     render_summary(rows)
@@ -1195,7 +1214,7 @@ def prior_attempts_cmd(entity, description, fuzzy, show_all, window, limit, as_j
 
     if not rows:
         target = entity or f'"{description or fuzzy}"'
-        console.print(f"[green]No prior attempts found for {target}.[/green]")
+        console.print(f"[green]No prior attempts found for {_safe_markup(target)}.[/green]")
         if not show_all:
             console.print(
                 "[dim]Nothing clearly tried-and-reverted — pass [bold]--all[/bold] "
@@ -1204,7 +1223,7 @@ def prior_attempts_cmd(entity, description, fuzzy, show_all, window, limit, as_j
         return  # empty is the normal, good answer — exit 0
 
     label = entity or f'"{description or fuzzy}"'
-    console.print(f"\n[bold]Prior attempts[/bold]  [dim]{label}[/dim]\n")
+    console.print(f"\n[bold]Prior attempts[/bold]  [dim]{_safe_markup(label)}[/dim]\n")
     outcome_styles = {
         "reverted": "red",
         "rejected": "red",
@@ -1222,8 +1241,8 @@ def prior_attempts_cmd(entity, description, fuzzy, show_all, window, limit, as_j
         )
         console.print(
             f"  [dim]{fmt_ts(r.get('timestamp', ''))}[/dim]  "
-            f"[cyan]{r.get('entity_path', '')}[/cyan]  "
-            f"[green]{r.get('change_type', '')}[/green]  "
+            f"[cyan]{_safe_markup(r.get('entity_path', ''))}[/cyan]  "
+            f"[green]{_safe_markup(r.get('change_type', ''))}[/green]  "
             f"[{outcome_style}]{outcome}[/{outcome_style}]  "
             f"[dim]({confidence})[/dim]{fuzzy_tag}"
         )
@@ -1272,8 +1291,8 @@ def prior_attempts_cmd(entity, description, fuzzy, show_all, window, limit, as_j
             continue
         style = status_styles.get(status, "dim")
         console.print(
-            f"  [bold]current status[/bold]  [cyan]{path}[/cyan]  "
-            f"[{style}]{status}[/{style}]"
+            f"  [bold]current status[/bold]  [cyan]{_safe_markup(path)}[/cyan]  "
+            f"[{style}]{_safe_markup(status)}[/{style}]"
         )
     console.print()
 
@@ -1662,7 +1681,7 @@ def log(entity_path, change_type, diff_text, reasoning, entity_type, agent, comm
         normalized_revisit = normalize_revisit_after(revisit_after)
         normalized_expires = validate_expires_when(expires_when)
     except ValueError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {_safe_markup(e)}")
         sys.exit(2)
 
     # Size bounds + secret-shape check, shared with the MCP write path so
@@ -1731,25 +1750,28 @@ def log(entity_path, change_type, diff_text, reasoning, entity_type, agent, comm
             )
             stored = storage.log_event(event)
     except ValueError as e:
-        err_console.print(f"[red]error:[/red] {e}")
+        err_console.print(f"[red]error:[/red] {_safe_markup(e)}")
         sys.exit(2)
 
-    suffix = f"  [dim]changeset:{stored.changeset_id}[/dim]" if stored.changeset_id else ""
+    # Entity paths, changeset ids and prior event ids can contain user data. The
+    # event is already stored here, so a MarkupError on the success line would
+    # exit nonzero after a committed write and invite a duplicate retry.
+    suffix = f"  [dim]changeset:{_safe_markup(stored.changeset_id)}[/dim]" if stored.changeset_id else ""
     if rename_from:
         console.print(
-            f"[green]✓[/green] Renamed [bold]{rename_from}[/bold] → "
-            f"[bold]{stored.entity_path}[/bold]  [dim]{stored.id[:8]}[/dim]{suffix}"
+            f"[green]✓[/green] Renamed [bold]{_safe_markup(rename_from)}[/bold] → "
+            f"[bold]{_safe_markup(stored.entity_path)}[/bold]  [dim]{_safe_markup(stored.id[:8])}[/dim]{suffix}"
         )
     elif change_type == "supersede":
         console.print(
-            f"[green]✓[/green] Superseded [dim]{stored.supersedes[:8]}[/dim] on "
-            f"[bold]{stored.entity_path}[/bold] — decision re-opened  "
-            f"[dim]{stored.id[:8]}[/dim]{suffix}"
+            f"[green]✓[/green] Superseded [dim]{_safe_markup(stored.supersedes[:8])}[/dim] on "
+            f"[bold]{_safe_markup(stored.entity_path)}[/bold] — decision re-opened  "
+            f"[dim]{_safe_markup(stored.id[:8])}[/dim]{suffix}"
         )
     else:
         console.print(
-            f"[green]✓[/green] Logged [bold]{stored.entity_path}[/bold] ({change_type})  "
-            f"[dim]{stored.id[:8]}[/dim]{suffix}"
+            f"[green]✓[/green] Logged [bold]{_safe_markup(stored.entity_path)}[/bold] ({_safe_markup(change_type)})  "
+            f"[dim]{_safe_markup(stored.id[:8])}[/dim]{suffix}"
         )
 
     # Surface reasoning-quality + entity-path-shape + revisit-date warnings so
@@ -1765,7 +1787,7 @@ def log(entity_path, change_type, diff_text, reasoning, entity_type, agent, comm
         stored.change_type, stored.stale_when, stored.expires_when
     )
     for warning in warnings:
-        err_console.print(f"[yellow]warning:[/yellow] {warning}")
+        err_console.print(f"[yellow]warning:[/yellow] {_safe_markup(warning)}")
 
 
 # ---------------------------------------------------------------------------
@@ -1904,10 +1926,11 @@ def supersede_cmd(entity_path, reasoning, diff_text, constraint, stale_when, exp
         return
 
     console.print(
-        f"[green]✓[/green] Superseded [dim]{stored.supersedes[:8]}[/dim] on "
-        f"[bold]{stored.entity_path}[/bold]  [dim]{stored.id[:8]}[/dim]"
+        f"[green]✓[/green] Superseded [dim]{_safe_markup(stored.supersedes[:8])}[/dim] on "
+        f"[bold]{_safe_markup(stored.entity_path)}[/bold]  "
+        f"[dim]{_safe_markup(stored.id[:8])}[/dim]"
     )
-    console.print(f"  [dim]Status[/dim]  [green]{decision['status_line']}[/green]")
+    console.print(f"  [dim]Status[/dim]  [green]{_safe_markup(decision['status_line'])}[/green]")
 
     for warning in [*limit_warnings, *check_reasoning_quality(reasoning)]:
         err_console.print(f"[yellow]warning:[/yellow] {warning}")
@@ -2143,6 +2166,72 @@ def backfill_commit(commit_hash, window, quiet):
 # ---------------------------------------------------------------------------
 
 
+def _read_export_history(since: str, entity: str, project: str, limit: int) -> list[dict]:
+    """Read export filters without creating a store or running migrations."""
+    import sqlite3
+
+    from .storage import _coalesce_event_nullables, _escape_like, canonicalize_entity_path
+
+    clauses = ["1=1"]
+    params: list = []
+    if since:
+        clauses.append("timestamp >= ?")
+        params.append(since)
+    if entity:
+        canonical = canonicalize_entity_path(entity)
+        clauses.append("(entity_path = ? OR entity_path LIKE ? ESCAPE '\\')")
+        params.extend([canonical, f"{_escape_like(canonical)}.%"])
+    if project:
+        clauses.append("project = ?")
+        params.append(project)
+    params.append(limit)
+    path = get_db_path(read_only=True)
+    conn = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA query_only=ON")
+        rows = conn.execute(
+            f"SELECT * FROM events WHERE {' AND '.join(clauses)} ORDER BY timestamp DESC LIMIT ?",
+            params,
+        ).fetchall()
+        return [_coalesce_event_nullables(dict(row)) for row in rows]
+    finally:
+        conn.close()
+
+
+def _check_markdown_export(output: str, content: str) -> None:
+    """Compare UTF-8 bytes and print a literal unified diff without writing."""
+    import difflib
+    import io
+
+    target = Path(output)
+    try:
+        actual = target.read_bytes()
+    except FileNotFoundError:
+        actual = b""
+        missing = True
+    else:
+        missing = False
+    if not missing and actual == content.encode("utf-8"):
+        return
+    previous = actual.decode("utf-8")
+    console.print(
+        Text(f"{output}: {'missing' if missing else 'out of date'}. "
+             "Regenerate with the same export command without --check."),
+        soft_wrap=True,
+    )
+    for line in difflib.unified_diff(
+        # Unified diffs use LF boundaries; a bare CR or form feed is content.
+        io.StringIO(previous, newline="\n").readlines(),
+        io.StringIO(content, newline="\n").readlines(),
+        fromfile="/dev/null" if missing else output, tofile=f"{output} (generated)",
+    ):
+        click.echo(line, nl=False)
+        if not line.endswith("\n"):
+            click.echo("\n\\ No newline at end of file")
+    raise click.exceptions.Exit(1)
+
+
 @cli.command()
 @click.option("--format", "fmt",
               type=click.Choice(["json", "csv", "agent-trace", "markdown"]), default="json",
@@ -2157,7 +2246,9 @@ def backfill_commit(commit_hash, window, quiet):
               help="agent-trace only: merge events sharing a session_id into one record")
 @click.option("--output", "-o", default="-",
               help="Output file path (default: stdout)")
-def export(fmt, since, entity, project, limit, ndjson, collapse, output):
+@click.option("--check", is_flag=True,
+              help="Markdown file only: fail with a diff if the digest is missing or stale; do not write it")
+def export(fmt, since, entity, project, limit, ndjson, collapse, output, check):
     """Export change history to JSON, CSV, Markdown, or Agent Trace.
 
     \b
@@ -2166,6 +2257,7 @@ def export(fmt, since, entity, project, limit, ndjson, collapse, output):
       selvedge export --format csv -o out.csv   # CSV file
       selvedge export --since 30d --entity users
       selvedge export --format markdown -o DECISIONS.md
+      selvedge export --format markdown -o DECISIONS.md --check
       selvedge export --format agent-trace -o trace.json
       selvedge export --format agent-trace --ndjson -o trace.ndjson
       selvedge export --format agent-trace --collapse-by-session -o trace.json
@@ -2175,7 +2267,10 @@ def export(fmt, since, entity, project, limit, ndjson, collapse, output):
     grouped by entity, with reverted decisions first. Commit it next to
     `.selvedge/` so the captured reasoning is reviewable in a diff — a
     binary store is not. Regenerating with no new events produces a
-    zero-line diff.
+    zero-line diff. --check requires --format markdown and an explicit output
+    file. It exits 0 silently for identical bytes, 1 for drift or read errors,
+    and 2 for invalid arguments. It does not initialize or migrate the store,
+    update the digest, or start background update/telemetry checks.
 
     \b
     The agent-trace format emits Agent Trace v0.1.0 records
@@ -2187,15 +2282,34 @@ def export(fmt, since, entity, project, limit, ndjson, collapse, output):
     """
     import csv as csv_mod
     import io
+    import sqlite3
 
-    resolved_since = resolve_since(since)
+    if check and (fmt != "markdown" or output in ("", "-")):
+        raise click.UsageError("--check requires --format markdown and an explicit --output file.")
+    if not check:
+        _start_background_tasks()
+
+    if check:
+        try:
+            resolved_since = parse_time_string(since) if since else ""
+        except ValueError as exc:
+            raise click.BadParameter(str(exc), param_hint="--since") from exc
+    else:
+        resolved_since = resolve_since(since)
     effective_limit = limit if limit > 0 else 1_000_000
-    rows = get_storage().get_history(
-        since=resolved_since,
-        entity_path=entity,
-        project=project,
-        limit=effective_limit,
-    )
+    if check:
+        try:
+            rows = _read_export_history(resolved_since, entity, project, effective_limit)
+        except (OSError, sqlite3.Error) as exc:
+            err_console.print(Text(f"Cannot read decision history: {exc}. Check SELVEDGE_DB and initialize or upgrade the store before checking."), soft_wrap=True)
+            raise click.exceptions.Exit(1) from exc
+    else:
+        rows = get_storage().get_history(
+            since=resolved_since,
+            entity_path=entity,
+            project=project,
+            limit=effective_limit,
+        )
 
     if fmt == "agent-trace":
         from .exporters.agent_trace import (
@@ -2224,10 +2338,19 @@ def export(fmt, since, entity, project, limit, ndjson, collapse, output):
             writer.writerows(rows)
         content = buf.getvalue()
 
-    if output == "-":
+    if check:
+        try:
+            _check_markdown_export(output, content)
+        except (OSError, UnicodeError) as exc:
+            err_console.print(Text(f"Cannot check {output}: {exc}. Ensure the digest is a readable UTF-8 file."), soft_wrap=True)
+            raise click.exceptions.Exit(1) from exc
+    elif output == "-":
         click.echo(content)
     else:
-        Path(output).write_text(content)
+        if fmt == "markdown":
+            Path(output).write_text(content, encoding="utf-8", newline="")
+        else:
+            Path(output).write_text(content)
         console.print(
             f"[green]✓[/green] Exported [bold]{len(rows)}[/bold] events "
             f"→ [dim]{output}[/dim]"
@@ -2617,12 +2740,36 @@ def setup(path, non_interactive, assume_yes, force, skip_init, skip_hook, skip_e
 
 @cli.command("demo")
 @click.option("--json", "json_output", is_flag=True, help="Emit the demo result as JSON.")
-def demo(json_output: bool) -> None:
+@click.option("--mcp", "use_mcp", is_flag=True, help="Save and retrieve through two local stdio MCP server processes.")
+def demo(json_output: bool, use_mcp: bool) -> None:
     """Try a saved decision across two sessions in a temporary database.
 
     No setup or agent needed. Your project, configuration and real database
     are untouched. The temporary database is removed after the demo.
+    Use --mcp to check this installation's server over stdio after a restart;
+    this does not verify your client's configuration, activation or hooks.
     """
+    if use_mcp:
+        from .mcp_demo import MCPDemoError, run_mcp_demo
+
+        try:
+            result = run_mcp_demo()
+        except MCPDemoError as error:
+            if json_output:
+                console.print_json(data={"status": "error", "transport": "stdio", "error": str(error)})
+            else:
+                err_console.print(str(error), markup=False, highlight=False)
+            raise click.exceptions.Exit(1) from None
+        if json_output:
+            console.print_json(data=result)
+            return
+        console.print("\n[bold]One decision. Two local MCP server processes.[/bold]\n")
+        console.print(f"Saved and retrieved the same record: {result['event_id']}", markup=False)
+        console.print(result["reasoning"], markup=False)
+        console.print("[green]PASS[/green] · rejected · confidence: exact")
+        console.print("Temporary database removed. Client configuration, activation and hooks remain unverified.")
+        return
+
     from .demo import run_demo
 
     result = run_demo()

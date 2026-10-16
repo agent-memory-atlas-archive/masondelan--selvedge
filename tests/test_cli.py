@@ -1063,6 +1063,17 @@ def test_supersede_keeps_diff_and_revisit_after(runner):
     assert payload["revisit_after"] == "180d"
 
 
+def test_supersede_markup_like_entity_is_literal_after_write(runner):
+    path = "users.[/oops]"
+    runner.invoke(cli, ["log", path, "add", "-r", "initial"])
+    runner.invoke(cli, ["log", path, "remove", "-r", "reverted"])
+
+    result = runner.invoke(cli, ["supersede", path, "-r", "retry with a new driver"])
+    assert result.exit_code == 0, result.output
+    assert path in result.output
+    assert "Traceback" not in result.output
+
+
 def test_supersede_short_diff_flag_and_json_output(runner):
     seed(entity="pay.token", change_type="remove")
 

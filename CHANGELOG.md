@@ -8,6 +8,21 @@ Selvedge uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.17] - 2026-10-15
+
+### Added
+- `selvedge demo --mcp` checks the local stdio MCP server by saving a synthetic
+  rejection, restarting the server and retrieving the same record ID and content.
+  The disposable check supports JSON output, times out and cleans up its server
+  processes. It does not verify an agent client's configuration, activation or hooks.
+- `selvedge export --format markdown -o DECISIONS.md --check` checks a digest
+  against existing history without rewriting it or initializing/migrating the
+  store. Identical UTF-8 bytes exit 0 silently; stale/missing files exit 1 with
+  a unified diff, read errors exit 1 with guidance, and invalid arguments exit 2.
+  Diffs preserve tabs and carriage returns. Markdown files use deterministic
+  UTF-8/LF output. Check mode skips background
+  update and telemetry checks; other export formats keep their existing behavior.
+
 ### Changed
 - Make product positioning and onboarding agent-agnostic. General setup and CLI
   guidance lead with compatible MCP/CLI access; client presets and lifecycle
@@ -19,6 +34,40 @@ Selvedge uses [semantic versioning](https://semver.org/).
   engineering standards, with a dated review of upstream guidance.
 - Add Python 3.14 to CI, pin Actions to upstream commits, verify SQLite source
   checksums and validate registry publication inputs before shell use.
+
+### Fixed
+- The MCP demo retains its deadline error when SDK shutdown raises a transport
+  exception during cancellation; failures before the deadline keep their own
+  error classification. JSON version guidance distinguishes the installed
+  Selvedge package from the version reported in the MCP handshake.
+- Both demo modes skip the parent CLI's background update check and opt-in
+  telemetry, preserving their promise not to modify user-global state.
+- `selvedge log` and `selvedge changeset` render user data (entity paths,
+  reasoning, agent, project, changeset ids, error text) literally. Values such
+  as `[/x]` no longer raise a Rich `MarkupError`; `log` previously exited 1
+  after the event was already stored, inviting a duplicate retry. `--json`
+  output is unchanged.
+- Human-readable `blame` labels explicit rejections as rejected, and Markdown
+  exports put them under "Considered and rejected" instead of "Tried and
+  reverted." Reopened copy now covers both kinds. Existing JSON status/phase
+  values, stored events and supersession behavior are unchanged.
+- Correct the coding-agent guide's change-type list, canonical prompt link and
+  measured MCP footprint. Update the planned Git AI reader's notes reference
+  to the upstream v3 namespace; the reader remains unimplemented.
+
+### Distribution
+
+- Synchronize Python, plugin, npm and MCP Registry versions at 0.3.17 and refresh
+  the Smithery bundle metadata from the live server. No new runtime dependencies,
+  migrations, MCP tools or default telemetry. Additional regression coverage
+  exercises literal output, rejection labels, protocol restart and digest drift.
+- Retain Python 3.10 compatibility for this patch release. Python 3.10 reached
+  upstream end of life on October 1, 2026; use tested, supported Python 3.11–3.14
+  for new installations. See [Python runtime status](https://devguide.python.org/versions/).
+- Clarify local MCP trust boundaries, provider-visible retrieved context and
+  optional network data flows in the security guidance.
+
+---
 
 ## [0.3.16] - 2026-10-01
 

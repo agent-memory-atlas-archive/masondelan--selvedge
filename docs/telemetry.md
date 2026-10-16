@@ -1,11 +1,19 @@
 # Telemetry
 
 Selvedge is local-first. Nothing about your code, your repos, or your
-agents' reasoning ever leaves your machine — and by default, **nothing
-leaves your machine at all**.
+agents' reasoning is sent by the core database or MCP server. This page
+describes the separate anonymous heartbeat: its telemetry path is off by
+default and sends zero bytes until you explicitly opt in.
 
-Telemetry is strictly opt-in. Until you explicitly enable it, Selvedge
-sends zero bytes. There is no phone-home on install, no first-run
+The interactive CLI has a separate, non-telemetry update check. On a stable
+install, an interactive TTY run may make one background `GET` to PyPI every
+24 hours to read the latest published version. It sends only the installed
+version in the `User-Agent`, never project data, and is disabled by
+`SELVEDGE_NO_UPDATE_CHECK=1`, `SELVEDGE_QUIET=1`, `CI`, a non-TTY run, or a
+development/pre-release install.
+
+Heartbeat telemetry is strictly opt-in. Until you explicitly enable it, that
+telemetry path sends zero bytes. There is no heartbeat on install, no first-run
 prompt that defaults to yes, no "anonymous by default" fine print.
 
 ## What gets sent (after you opt in)
@@ -38,7 +46,8 @@ extra events, and no per-command tracking.
 
 The heartbeat exists to answer exactly one question — *how many
 installs were active this week* — and is deliberately incapable of
-answering any other.
+answering any other. It does not measure website visits, clicks, downloads,
+trial completion, or adoption.
 
 ## What is never sent
 

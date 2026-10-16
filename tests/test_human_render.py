@@ -193,6 +193,14 @@ def test_blame_no_hit_unchanged(runner):
     assert payload["error"].startswith("No history found")
 
 
+def test_blame_markup_like_no_hit_is_literal(runner):
+    path = "x.[/oops]"
+    result = runner.invoke(cli, ["blame", path])
+    assert result.exit_code == 1
+    assert path in result.output
+    assert "Traceback" not in result.output
+
+
 def test_blame_json_hit_matches_mcp_and_keeps_long_evidence(runner):
     long_reason = "Kept the refresh-token table. " * 20
     long_path = "src/auth/session.py::handle_login_and_refresh_token"
@@ -225,6 +233,49 @@ def test_blame_markup_like_reasoning_is_literal(runner):
     result = runner.invoke(cli, ["blame", "users.flag"])
     assert result.exit_code == 0
     assert "[red]this[/red]" in result.output
+
+
+def test_blame_markup_like_stored_fields_are_literal(runner):
+    _log(
+        "users.flag",
+        "add",
+        "2026-01-01T00:00:00Z",
+        "safe reasoning",
+        agent="[red]agent[/red]",
+        diff="[/oops]",
+        stale_when="[bold]condition[/bold]",
+    )
+    result = runner.invoke(cli, ["blame", "users.flag"])
+    assert result.exit_code == 0, result.output
+    assert "[red]agent[/red]" in result.output
+    assert "[/oops]" in result.output
+    assert "[bold]condition[/bold]" in result.output
+
+
+def test_blame_markup_like_reverted_status_is_literal(runner):
+    _log("users.flag", "add", "2026-01-01T00:00:00Z", "tried flag")
+    _log("users.flag", "remove", "2026-01-02T00:00:00Z", "reverted: [/oops] broke it")
+    result = runner.invoke(cli, ["blame", "users.flag"])
+    assert result.exit_code == 0, result.output
+    assert "[/oops]" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_diff_markup_like_hit_values_are_literal(runner):
+    path = "users.[/oops]"
+    _log(
+        path,
+        "add",
+        "2026-01-01T00:00:00Z",
+        "[/reason]",
+        agent="[red]agent[/red]",
+        diff="[/diff]",
+    )
+    result = runner.invoke(cli, ["diff", path])
+    assert result.exit_code == 0, result.output
+    for value in (path, "[/reason]", "[red]agent[/red]", "[/diff]"):
+        assert value in result.output
+    assert "Traceback" not in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +311,15 @@ def test_prior_attempts_recorded_reason_vs_empty_reason(runner):
     assert payload[0]["outcome"] == "reverted"
 
 
+def test_prior_attempts_markup_like_entity_is_literal(runner):
+    path = "users.[oops]"
+    _log(path, "add", "2026-01-01T00:00:00Z", "Tried it.")
+    _log(path, "remove", "2026-01-02T00:00:00Z", "Reverted it.")
+    result = runner.invoke(cli, ["prior-attempts", path])
+    assert result.exit_code == 0, result.output
+    assert path in result.output
+
+
 def test_prior_attempts_no_hit_exits_zero(runner):
     result = runner.invoke(cli, ["prior-attempts", "ghost.entity"])
     assert result.exit_code == 0
@@ -269,6 +329,14 @@ def test_prior_attempts_no_hit_exits_zero(runner):
     raw = runner.invoke(cli, ["prior-attempts", "ghost.entity", "--json"])
     assert raw.exit_code == 0
     assert json.loads(raw.stdout) == []
+
+
+@pytest.mark.parametrize("args", [["users.[/oops]"], ["--description", "[/x] retry"]])
+def test_prior_attempts_markup_like_no_hit_is_literal(runner, args):
+    result = runner.invoke(cli, ["prior-attempts", *args])
+    assert result.exit_code == 0
+    assert "Traceback" not in result.output
+    assert args[-1] in result.output
 
 
 def test_prior_attempts_json_matches_mcp_on_hit(runner):

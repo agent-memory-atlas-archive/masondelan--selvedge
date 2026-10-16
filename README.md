@@ -38,9 +38,15 @@ uv tool install --upgrade selvedge
 selvedge demo
 ```
 
-Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python
-3.10+. The demo uses a temporary database. Follow the [quickstart](#quickstart)
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python.
+Python 3.11–3.14 is recommended; Python 3.10 remains compatible but is end of life.
+The demo uses a temporary database. Follow the [quickstart](#quickstart)
 to connect your agent to a real project.
+
+Use `selvedge demo --mcp` to save through a local stdio MCP server, restart it
+and retrieve the same record. Add `--json` for the checked IDs and versions.
+This tests the Python installation running Selvedge with disposable data;
+your agent's configuration, activation and hooks still need a separate check.
 
 ## Who Selvedge is for
 
@@ -57,6 +63,27 @@ Only explicitly saved decisions can be recalled. A saved explanation is an
 account supplied by a person or agent; Selvedge does not verify that it is true
 or guarantee that an agent will consult it. [Verify one decision across two
 sessions](https://selvedge.sh/guides/verify-first-decision/) to test your setup.
+
+---
+
+## What's new in v0.3.17
+
+**Check recorded decisions before a review.** Generate a Markdown digest, then
+run `selvedge export --format markdown -o DECISIONS.md --check` to catch drift.
+An identical digest exits 0 silently; a stale or missing digest exits 1 with a
+unified diff and regeneration guidance. Check mode preserves the digest and
+stored records. Review exported reasoning before publishing it.
+
+`selvedge demo --mcp` saves a synthetic rejection through a real local MCP
+server, restarts it and retrieves the same record. It uses disposable state;
+it does not verify your agent's configuration or hook activation.
+
+CLI output now preserves literal brackets in user data, and `blame` and Markdown
+exports distinguish rejected approaches from changes that were tried and reverted.
+Python 3.10 compatibility remains for this patch, but that runtime is now
+[upstream end of life](https://devguide.python.org/versions/); use tested,
+supported Python 3.11–3.14 for new installations. No new runtime dependencies,
+migrations or MCP tools.
 
 ---
 
@@ -78,26 +105,6 @@ without memory and 0/6 with injected records. Both conditions passed the stale
 and unrelated controls. Two synthetic tasks do not establish general coding
 performance or superiority over maintained files; the earlier four-arm tie is
 still disclosed. No new runtime dependencies, migrations or MCP tools.
-
----
-
-## What's new in v0.3.15
-
-**Native lifecycle adapters for all six setup targets.**
-
-Setup now offers hooks for Codex, Cursor, VS Code Copilot Local, Gemini CLI and
-Windsurf/Cascade alongside Claude Code. Startup context and watched-edit checks
-are available where the client supports them; compaction notifications are
-advisory. Windsurf provides edit and command checks only. Existing configuration
-is preserved, with backups and visible conflicts for customized hooks.
-
-See [capabilities, activation and verification](docs/agent-hooks.md). The new
-adapters have protocol and subprocess coverage; client versions and harnesses
-still matter. No new dependencies, MCP tools, migrations or default telemetry.
-
-The [configuration pilot](bench/decision_memory/results/2026-09-25/) publishes
-all 48 measured trials and controls, including failures. It does not establish
-an advantage over a maintained file or the same information in a prompt.
 
 ---
 
@@ -652,19 +659,46 @@ Every key also has an env override (`SELVEDGE_DIFF_BYTES`,
 ## Reviewing captured intent in a pull request
 
 `.selvedge/selvedge.db` is a SQLite file, so the reasoning inside it doesn't
-show up in a diff. Export a Markdown digest next to it and commit both:
+show up in a diff. If you want a reviewable copy, export a Markdown digest:
 
 ```bash
 selvedge export --format markdown -o .selvedge/DECISIONS.md
-git add .selvedge/
+git add .selvedge/DECISIONS.md
 ```
 
-The digest is grouped by entity with **reverted decisions first**, and it is
-deterministic — regenerating with no new events produces a zero-line diff, so
+The digest is grouped by entity with **reverted and rejected decisions first**.
+Explicit `reject` events appear under **Considered and rejected**, separate from
+**Tried and reverted**. The latest event determines the section; a later
+`supersede` moves either kind to **Re-opened** while retaining the full history.
+Human-readable `blame` also labels explicit rejections as "rejected". For API
+compatibility, JSON `status` and trail `phase` keep the existing `reverted`
+negative-verdict category; `change_type: "reject"` identifies a rejection.
+
+The digest is deterministic — regenerating with no new events produces a zero-line diff, so
 it stays reviewable instead of becoming noise everyone learns to skip. Heading
 anchors derive from the entity path, so links into it keep working as it
 grows. Regenerate it in the same commit as the code, or from a pre-commit
 hook.
+
+To catch a stale or missing digest in a hook or CI, use the same filters and
+output path with `--check`:
+
+```bash
+selvedge export --format markdown -o .selvedge/DECISIONS.md --check
+```
+
+The check exits **0** silently when the UTF-8, LF-terminated bytes match,
+**1** with a unified diff when stale or missing (or an error when unreadable),
+and **2** for invalid arguments. It requires Markdown and an explicit file;
+stdout and other formats are rejected. It does not rewrite the digest, create
+or migrate a database, change stored records, or start background update and
+telemetry checks. Use an existing initialized store in CI, selected through the
+normal database resolution or `SELVEDGE_DB`. SQLite may maintain its normal WAL
+locking files while reading. Regenerate without `--check` to update the digest.
+
+Publishing either the digest or database is optional. Review captured reasoning
+and metadata for secrets and private information before committing or sharing
+them; a generated diff can also expose that information in CI logs.
 
 ---
 
@@ -701,7 +735,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0            # full history so commits can be matched
-      - uses: masondelan/selvedge@v0.3.16   # pin to a release tag (or @main for latest)
+      - uses: masondelan/selvedge@v0.3.17   # pin to a release tag (or @main for latest)
         with:
           since: 30d
           fail-under: "0.5"         # optional: fail below 50% coverage; omit to report only
