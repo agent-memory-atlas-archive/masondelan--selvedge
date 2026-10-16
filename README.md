@@ -652,11 +652,11 @@ Every key also has an env override (`SELVEDGE_DIFF_BYTES`,
 ## Reviewing captured intent in a pull request
 
 `.selvedge/selvedge.db` is a SQLite file, so the reasoning inside it doesn't
-show up in a diff. Export a Markdown digest next to it and commit both:
+show up in a diff. If you want a reviewable copy, export a Markdown digest:
 
 ```bash
 selvedge export --format markdown -o .selvedge/DECISIONS.md
-git add .selvedge/
+git add .selvedge/DECISIONS.md
 ```
 
 The digest is grouped by entity with **reverted decisions first**, and it is
@@ -665,6 +665,26 @@ it stays reviewable instead of becoming noise everyone learns to skip. Heading
 anchors derive from the entity path, so links into it keep working as it
 grows. Regenerate it in the same commit as the code, or from a pre-commit
 hook.
+
+To catch a stale or missing digest in a hook or CI, use the same filters and
+output path with `--check`:
+
+```bash
+selvedge export --format markdown -o .selvedge/DECISIONS.md --check
+```
+
+The check exits **0** silently when the UTF-8, LF-terminated bytes match,
+**1** with a unified diff when stale or missing (or an error when unreadable),
+and **2** for invalid arguments. It requires Markdown and an explicit file;
+stdout and other formats are rejected. It does not rewrite the digest, create
+or migrate a database, change stored records, or start background update and
+telemetry checks. Use an existing initialized store in CI, selected through the
+normal database resolution or `SELVEDGE_DB`. SQLite may maintain its normal WAL
+locking files while reading. Regenerate without `--check` to update the digest.
+
+Publishing either the digest or database is optional. Review captured reasoning
+and metadata for secrets and private information before committing or sharing
+them; a generated diff can also expose that information in CI logs.
 
 ---
 
