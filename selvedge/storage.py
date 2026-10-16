@@ -55,8 +55,8 @@ CREATE TABLE IF NOT EXISTS events (
     changeset_id TEXT NOT NULL DEFAULT '',
     metadata     TEXT NOT NULL DEFAULT '{}',
     -- Active memory v1 (v0.3.8, migration v3). NULLABLE on purpose — pre-v3
-    -- rows read back as NULL; new writes store '' for "absent". `expires_when`
-    -- ships now but its evaluator is deferred to v0.3.11.
+    -- rows read back as NULL; new writes store '' for "absent". The local-only
+    -- `expires_when` evaluator shipped in v0.3.11; see get_stale_decisions.
     revisit_after TEXT,
     expires_when  TEXT,
     -- Decision states + supersede flow (v0.3.9.1, migration v4). Same

@@ -1367,12 +1367,13 @@ github.com).
       as "the open standard for tracking AI authorship in Git"; if
       that framing gets endorsed by Cursor / Anthropic / GitHub,
       Selvedge needs to be a *complement* to it, not a substitute.
-      Reads `refs/notes/git-ai` (or whatever ref the format settles
-      on) and maps line-range authorship into per-file `ChangeEvent`
+      Planned reader targets `refs/notes/ai`, the namespace specified by
+      [Git AI Standard v3.0.0](https://github.com/git-ai-project/git-ai/blob/main/specs/git_ai_standard_v3.0.0.md),
+      and maps line-range authorship into per-file `ChangeEvent`
       rows with `agent` populated from the note. Line ranges stored
       in `metadata` under `source_format: "git-notes"`. **Read-only
       on purpose** — export deferred to avoid entangling release
-      pacing with Git AI's format evolution. Implementation in
+      pacing with Git AI's format evolution. Proposed implementation in
       `selvedge/importers.py::parse_git_notes`.
 - [ ] **Verifiable-no-network test** — `tests/test_no_network.py`
       imports every Selvedge entry-point module and asserts
