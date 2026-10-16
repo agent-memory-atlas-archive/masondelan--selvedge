@@ -38,8 +38,9 @@ uv tool install --upgrade selvedge
 selvedge demo
 ```
 
-Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python
-3.10+. The demo uses a temporary database. Follow the [quickstart](#quickstart)
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python.
+Python 3.11–3.14 is recommended; Python 3.10 remains compatible but is end of life.
+The demo uses a temporary database. Follow the [quickstart](#quickstart)
 to connect your agent to a real project.
 
 Use `selvedge demo --mcp` to save through a local stdio MCP server, restart it
@@ -65,6 +66,27 @@ sessions](https://selvedge.sh/guides/verify-first-decision/) to test your setup.
 
 ---
 
+## What's new in v0.3.17
+
+**Check recorded decisions before a review.** Generate a Markdown digest, then
+run `selvedge export --format markdown -o DECISIONS.md --check` to catch drift.
+An identical digest exits 0 silently; a stale or missing digest exits 1 with a
+unified diff and regeneration guidance. Check mode preserves the digest and
+stored records. Review exported reasoning before publishing it.
+
+`selvedge demo --mcp` saves a synthetic rejection through a real local MCP
+server, restarts it and retrieves the same record. It uses disposable state;
+it does not verify your agent's configuration or hook activation.
+
+CLI output now preserves literal brackets in user data, and `blame` and Markdown
+exports distinguish rejected approaches from changes that were tried and reverted.
+Python 3.10 compatibility remains for this patch, but that runtime is now
+[upstream end of life](https://devguide.python.org/versions/); use tested,
+supported Python 3.11–3.14 for new installations. No new runtime dependencies,
+migrations or MCP tools.
+
+---
+
 ## What's new in v0.3.16
 
 **Bring recorded decisions into code review.** `selvedge ledger` shows who
@@ -83,26 +105,6 @@ without memory and 0/6 with injected records. Both conditions passed the stale
 and unrelated controls. Two synthetic tasks do not establish general coding
 performance or superiority over maintained files; the earlier four-arm tie is
 still disclosed. No new runtime dependencies, migrations or MCP tools.
-
----
-
-## What's new in v0.3.15
-
-**Native lifecycle adapters for all six setup targets.**
-
-Setup now offers hooks for Codex, Cursor, VS Code Copilot Local, Gemini CLI and
-Windsurf/Cascade alongside Claude Code. Startup context and watched-edit checks
-are available where the client supports them; compaction notifications are
-advisory. Windsurf provides edit and command checks only. Existing configuration
-is preserved, with backups and visible conflicts for customized hooks.
-
-See [capabilities, activation and verification](docs/agent-hooks.md). The new
-adapters have protocol and subprocess coverage; client versions and harnesses
-still matter. No new dependencies, MCP tools, migrations or default telemetry.
-
-The [configuration pilot](bench/decision_memory/results/2026-09-25/) publishes
-all 48 measured trials and controls, including failures. It does not establish
-an advantage over a maintained file or the same information in a prompt.
 
 ---
 
@@ -733,7 +735,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0            # full history so commits can be matched
-      - uses: masondelan/selvedge@v0.3.16   # pin to a release tag (or @main for latest)
+      - uses: masondelan/selvedge@v0.3.17   # pin to a release tag (or @main for latest)
         with:
           since: 30d
           fail-under: "0.5"         # optional: fail below 50% coverage; omit to report only
