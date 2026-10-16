@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -121,7 +122,10 @@ def test_missing_server_fails_actionably_and_cleans_up(tmp_path, monkeypatch, as
     assert list(disposable.iterdir()) == []
 
 
-def test_hung_server_times_out_is_terminated_and_cleans_up(tmp_path, monkeypatch):
+@pytest.mark.parametrize("starts_after_deadline", [False, True])
+def test_hung_server_times_out_is_terminated_and_cleans_up(
+    tmp_path, monkeypatch, starts_after_deadline,
+):
     disposable = tmp_path / "disposable"
     _local_temp(monkeypatch, disposable)
     pid_file = tmp_path / "pid"
@@ -132,7 +136,10 @@ def test_hung_server_times_out_is_terminated_and_cleans_up(tmp_path, monkeypatch
         params.args = ["-c", (
             "import os, time\n"
             f"with open({str(pid_file)!r}, 'w') as f: f.write(str(os.getpid()))\n"
-            "time.sleep(60)\n"
+            + (
+                "time.sleep(0.5)\nfrom selvedge.server import main\nmain()\n"
+                if starts_after_deadline else "time.sleep(60)\n"
+            )
         )]
         return params
 
@@ -148,6 +155,32 @@ def test_hung_server_times_out_is_terminated_and_cleans_up(tmp_path, monkeypatch
     if os.name == "posix":
         with pytest.raises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
+
+
+@pytest.mark.parametrize("during_cancellation", [False, True])
+def test_only_the_demo_deadline_labels_transport_errors_as_timeouts(
+    tmp_path, monkeypatch, during_cancellation,
+):
+    """SDK cleanup can replace cancellation with a transport exception."""
+    disposable = tmp_path / "disposable"
+    _local_temp(monkeypatch, disposable)
+
+    async def failed_exchange(params, errlog):
+        if not during_cancellation:
+            raise RuntimeError("Transport failed before the deadline.")
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            raise RuntimeError("Transport closed while cancelling.") from None
+
+    monkeypatch.setattr(mcp_demo, "_round_trip", failed_exchange)
+    monkeypatch.setattr(mcp_demo, "_TIMEOUT_SECONDS", 0.01)
+    result = CliRunner().invoke(cli, ["demo", "--mcp", "--json"])
+    assert result.exit_code == 1
+    message = json.loads(result.stdout)["error"]
+    assert ("exceeded 0.01 seconds" in message) is during_cancellation
+    assert "pip check" in message
+    assert list(disposable.iterdir()) == []
 
 
 @pytest.mark.parametrize("wrong", ["id", "reasoning"])
